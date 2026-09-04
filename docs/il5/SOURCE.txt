@@ -1,0 +1,4 @@
+Snapshot of https://github.com/KRNichols/IL5-Agent-Protocol
+commit da6bf2880aad20aa757b894976304271a3a50511
+Official workbooks (FedRAMP Appendix A High, DoD SSP Addendum on cyber.mil, CNSSI 1253) beat this snapshot if they disagree.
+Do not invent control counts from blogs.
