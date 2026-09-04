@@ -5,7 +5,9 @@ import type {
   HillclimbEvent,
   HillclimbIteration,
   HillclimbRun,
+  IdentityStatus,
   Message,
+  OperatorAttestation,
   RuntimeStatus,
   StreamEvent,
 } from "./types";
@@ -267,6 +269,34 @@ export async function listenHillclimb(onEvent: (event: HillclimbEvent) => void):
     return listen<HillclimbEvent>("hillclimb-event", (event) => onEvent(event.payload));
   }
   return () => undefined;
+}
+
+export async function getIdentity(): Promise<IdentityStatus> {
+  if (isTauri()) return invokeTauri<IdentityStatus>("identity_status");
+  const res = await fetch("/api/identity");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function setOperatorAttestation(input: {
+  operator_name: string;
+  organization: string;
+  statement: string;
+}): Promise<OperatorAttestation> {
+  if (isTauri()) {
+    return invokeTauri<OperatorAttestation>("set_operator_attestation", {
+      operatorName: input.operator_name,
+      organization: input.organization,
+      statement: input.statement,
+    });
+  }
+  const res = await fetch("/api/identity/attest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export function isDesktopRuntime() {
