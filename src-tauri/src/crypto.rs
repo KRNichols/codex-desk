@@ -59,6 +59,7 @@ pub fn open(key: &Dek, blob: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "decrypt failed — key unlock failed or the file was tampered".to_string())
 }
 
+#[allow(dead_code)]
 pub fn looks_like_envelope(blob: &[u8]) -> bool {
     blob.len() >= MAGIC.len() + 1 + NONCE_LEN + TAG_LEN && &blob[..5] == MAGIC
 }

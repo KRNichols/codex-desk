@@ -27,8 +27,10 @@ pub fn emit(app: &AppHandle, event: HillclimbEvent) {
 
 fn with_db<T>(app: &AppHandle, f: impl FnOnce(&rusqlite::Connection) -> T) -> Option<T> {
     let state = app.try_state::<AppState>()?;
-    let db = state.db.lock().ok()?;
-    Some(f(&*db))
+    let mut db = state.db.lock().ok()?;
+    let out = f(&*db);
+    let _ = db.persist();
+    Some(out)
 }
 
 pub fn start_run(
@@ -47,8 +49,11 @@ pub fn start_run(
         let state = app.state::<AppState>();
         app_data = state.app_data.clone();
         project_cwd = state.project_cwd.clone();
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let mut db = state.db.lock().map_err(|e| e.to_string())?;
         agent = agents::get_agent(&db, &agent_id)?.ok_or_else(|| "Agent not found.".to_string())?;
+        if allow_writes {
+            crate::identity::require_write_attestation(&db)?;
+        }
         run = agents::create_run(&db, &agent_id, &goal, &success_criteria, max_iterations, allow_writes)?;
         let _ = agents::update_agent(&db, &agent_id, None, None, None, Some("running"), None, None);
         audit::write(
@@ -59,6 +64,7 @@ pub fn start_run(
             &run.id,
             &format!("agent={} writes={} max={}", agent.name, allow_writes, run.max_iterations),
         );
+        let _ = db.persist();
     }
 
     let cancel = Arc::new(AtomicBool::new(false));
@@ -82,11 +88,12 @@ pub fn cancel_run(app: &AppHandle, run_id: &str) -> Result<HillclimbRun, String>
             flag.store(true, Ordering::Relaxed);
         }
     }
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
     let run = agents::get_run(&db, run_id)?.ok_or_else(|| "Run not found.".to_string())?;
     let updated = agents::update_run(&db, run_id, run.current_iteration, "cancelled", run.last_grade.as_deref(), run.last_gaps.as_deref())?;
     let _ = agents::update_agent(&db, &run.agent_id, None, None, None, Some("idle"), None, None);
     audit::write(&db, &state.app_data, "hillclimb.cancel", "run", run_id, "user cancel");
+    let _ = db.persist();
     Ok(updated)
 }
 
@@ -314,6 +321,7 @@ fn execute_loop(
         };
 
         let (grade, gaps) = parse_grade(&grader_text);
+        let (grade, gaps) = crate::policy::enforce_grade(&worker_text, &grader_text, &grade, &gaps);
         prior_gaps = Some(gaps.clone());
         let terminal = if grade == "PASS" {
             "passed"
@@ -377,13 +385,14 @@ fn execute_loop(
 
 fn fail(app: &AppHandle, agent: &Agent, run_id: &str, message: &str, secret_fail: bool) {
     if let Some(state) = app.try_state::<AppState>() {
-        if let Ok(db) = state.db.lock() {
+        if let Ok(mut db) = state.db.lock() {
             let _ = agents::update_run(&db, run_id, 0, "error", Some("HOLD"), Some(message));
             let _ = agents::update_agent(&db, &agent.id, None, None, None, Some("blocked"), None, None);
             audit::write(&db, &state.app_data, "hillclimb.stop", "run", run_id, "error");
             if secret_fail {
                 audit::write(&db, &state.app_data, "secret.access_failure", "run", run_id, "Codex missing or Azure auth failed (value not logged)");
             }
+            let _ = db.persist();
         }
         if let Ok(mut runs) = state.runs.lock() {
             runs.remove(&format!("run:{run_id}"));
