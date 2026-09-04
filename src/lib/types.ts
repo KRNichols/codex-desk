@@ -18,7 +18,38 @@ export type RuntimeStatus = {
   env_key_name: string | null;
   env_key_present: boolean;
   suggested_workspace: string | null;
+  store_encrypted?: boolean;
+  key_backend?: string | null;
+  audit_chain_ok?: boolean;
+  session_user?: string;
+  machine_bound?: boolean;
+  machine_binding_ok?: boolean;
+  operator_attested?: boolean;
+  pat_slot?: string;
+  hello_bind?: string;
+  runner_allowlist?: string;
   issues: SetupIssue[];
+};
+
+export type OperatorAttestation = {
+  configured: boolean;
+  operator_name: string | null;
+  organization: string | null;
+  statement: string | null;
+  at: string | null;
+};
+
+export type IdentityStatus = {
+  session_user: string;
+  machine_id_present: boolean;
+  machine_bound: boolean;
+  machine_binding_ok: boolean;
+  key_backend: string;
+  store_encrypted: boolean;
+  audit_chain_ok: boolean;
+  operator_attestation: OperatorAttestation;
+  pat_slot: string;
+  hello_bind: string;
 };
 
 export type Chat = {
@@ -104,4 +135,6 @@ export type AuditEvent = {
   entity_type: string;
   entity_id: string;
   detail: string;
+  prev_hash?: string;
+  event_hash?: string;
 };

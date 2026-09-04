@@ -6,6 +6,7 @@ export const IL5_HARD_TRUTHS = `IL5 HARD TRUTHS (do not violate):
 - Never write exploits, PoCs, payloads, or attack playbooks.
 - Never put a PAT, API key, or token in source, SQLite, logs, or git.
 - Do not "solve" IL5 by deleting audit logs, residual-risk tables, or secret-handling rules, or by writing that authorization is complete.
+- Do not weaken store encryption (AES-256-GCM + OS-backed DEK), hash-chained audit, TLS-only Azure endpoints, or the local-Codex-only egress allowlist.
 - Stay inside the assigned workspace path. No home-directory sprawl.
 - Do not git commit or git push unless the operator's goal explicitly asked. Codex Desk never auto-pushes.
 `;
@@ -21,6 +22,17 @@ export const IL5_GRADER_BRIEF = `You grade Codex Desk (or the handed workspace) 
 docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md and docs/il5/AGENTS.md.
 Score only what was handed. Mark the rest MISSING.
 READY/PASS is never an ATO. High-only claiming IL5 is HOLD.
+HOLD if encryption, hash-chained audit, secret non-storage, TLS refusal,
+or local-Codex-only egress is weakened or if the worker claims authorization.
+`;
+
+export const CLOSE_IL5_MISSING_GOAL =
+  "Close IL5 MISSING items in SECURITY.md for product-owned rows.";
+
+export const CLOSE_IL5_MISSING_CRITERIA = `Product-owned SECURITY.md rows move to PASS or PARTIAL with file/module evidence.
+Encrypted local store with OS-backed key works. Setup refuses cleartext endpoints and PAT-in-store.
+Audit is hash-chained. Hill-climb grader HOLDs ATO claims and weakened encryption/audit/secret rules.
+No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA rows may stay MISSING/external.
 `;
 
 export function workerPrompt(args: {
@@ -72,10 +84,12 @@ Also emit the report block from docs/il5/AGENTS.md (READY|HOLD|WARN).
 READY means prep-ready for a human GRC review — never authorized.
 If docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md is missing, HOLD.
 If the worker claimed ATO / FedRAMP authorization / DISA PA, HOLD.
+If the worker weakens encryption, audit hashing, secret non-storage, TLS refusal, or local-Codex-only egress, HOLD.
 `
     : `
 Grade the worker against the success criteria only.
-If the worker claimed ATO or dropped audit/secret rules to "pass," HOLD.
+If the worker claimed ATO or dropped audit/secret/encryption rules to "pass," HOLD.
+If Desk Improver removes the encrypted store, OS key custody, hash-chained audit, or TLS refusal, HOLD.
 `;
   return `${IL5_HARD_TRUTHS}
 
