@@ -12,7 +12,9 @@ import {
   startHillclimb,
   updateAgent,
 } from "@/lib/runtime";
+import { CLOSE_IL5_MISSING_CRITERIA, CLOSE_IL5_MISSING_GOAL } from "@/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, RuntimeStatus } from "@/lib/types";
+import { IdentityPanel } from "@/components/IdentityPanel";
 
 export function AgentPanel({
   agent,
@@ -129,8 +131,21 @@ export function AgentPanel({
           </Button>
         </section>
 
+        <IdentityPanel status={status} />
+
         <section className="rounded-xl border border-border bg-card/50 p-4">
           <h3 className="font-medium">Start hill-climb</h3>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => {
+              setGoal(CLOSE_IL5_MISSING_GOAL);
+              setCriteria(CLOSE_IL5_MISSING_CRITERIA);
+            }}
+          >
+            Use IL5 product-owned gap template
+          </Button>
           <label className="mt-3 block text-xs text-muted-foreground">Goal</label>
           <Textarea
             value={goal}
@@ -163,7 +178,7 @@ export function AgentPanel({
                 checked={allowWrites}
                 onChange={(e) => setAllowWrites(e.target.checked)}
               />
-              Allow workspace writes (still no auto-push)
+              Allow workspace writes (requires identity attestation; still no auto-push)
             </label>
           </div>
           {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
