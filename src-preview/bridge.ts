@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as hill from "./hillclimb";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -6,6 +6,28 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect } from "vite";
+import {
+  helloBind,
+  loadOrCreateDek,
+  machineBinding,
+  machineId,
+  patSlotPresent,
+  sessionUser,
+  setPatSlot,
+  clearPatSlot,
+  getPatSlot,
+} from "./crypto";
+import {
+  DATA_DIR,
+  auditChainOk,
+  leftoverPlaintext,
+  loadStore,
+  saveStore,
+  storeEncryptedOnDisk,
+  writeAudit,
+  writeUnlockFailure,
+} from "./secure-store";
+import { assertLocalCodex, isCleartextUrl, urlHasQuerySecret } from "./policy";
 
 type Chat = {
   id: string;
@@ -24,30 +46,27 @@ type Message = {
   status: string;
 };
 
-type StoreFile = { chats: Chat[]; messages: Message[] };
+type StoreFile = { chats?: Chat[]; messages?: Message[] };
 
-const DATA_DIR = path.resolve(process.cwd(), ".data");
-const STORE_PATH = path.join(DATA_DIR, "preview-store.json");
 const ENV_LOCAL = path.resolve(process.cwd(), ".env.local");
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function loadStore(): StoreFile {
-  if (!existsSync(STORE_PATH)) {
-    return { chats: [], messages: [] };
-  }
+function loadChatStore(): { chats: Chat[]; messages: Message[] } {
   try {
-    return JSON.parse(readFileSync(STORE_PATH, "utf8")) as StoreFile;
-  } catch {
+    const store = loadStore() as StoreFile;
+    return { chats: store.chats ?? [], messages: store.messages ?? [] };
+  } catch (err) {
+    writeUnlockFailure(err instanceof Error ? err.message : String(err));
     return { chats: [], messages: [] };
   }
 }
 
-function saveStore(store: StoreFile) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+function saveChatStore(store: { chats: Chat[]; messages: Message[] }) {
+  const current = loadStore();
+  saveStore({ ...current, chats: store.chats, messages: store.messages });
 }
 
 function parseEnvFile(filePath: string): Record<string, string> {
@@ -122,12 +141,12 @@ function runtimeStatus() {
   }
   let envKey = parsed.envKey;
   if (!envKey) {
-    if (lookupEnv(local, "AZURE_LLM_PAT")) envKey = "AZURE_LLM_PAT";
+    if (lookupEnv(local, "AZURE_LLM_PAT") || getPatSlot(DATA_DIR)) envKey = "AZURE_LLM_PAT";
     else if (lookupEnv(local, "AZURE_OPENAI_API_KEY")) envKey = "AZURE_OPENAI_API_KEY";
   }
   const envKeyPresent = envKey
-    ? Boolean(lookupEnv(local, envKey))
-    : Boolean(lookupEnv(local, "AZURE_LLM_PAT") || lookupEnv(local, "AZURE_OPENAI_API_KEY"));
+    ? Boolean(lookupEnv(local, envKey) || (envKey === "AZURE_LLM_PAT" && getPatSlot(DATA_DIR)))
+    : Boolean(lookupEnv(local, "AZURE_LLM_PAT") || lookupEnv(local, "AZURE_OPENAI_API_KEY") || getPatSlot(DATA_DIR));
 
   const issues: { code: string; message: string }[] = [];
   if (!binary) {
@@ -141,6 +160,24 @@ function runtimeStatus() {
     issues.push({
       code: "codex_unconfigured",
       message: `No Codex config at ${home}. Add config.toml (Azure endpoint) and set AZURE_LLM_PAT in the environment or .env.local.`,
+    });
+  }
+  if (endpoint && isCleartextUrl(endpoint)) {
+    issues.push({
+      code: "cleartext_endpoint",
+      message: "Refusing a cleartext (http://) Azure endpoint. Codex must use HTTPS only.",
+    });
+  }
+  if (endpoint && urlHasQuerySecret(endpoint)) {
+    issues.push({
+      code: "endpoint_query_token",
+      message: "Refusing an endpoint that embeds a token, signature, or credentials. Use AZURE_LLM_PAT / OS secret store.",
+    });
+  }
+  if (leftoverPlaintext()) {
+    issues.push({
+      code: "plaintext_preview_store",
+      message: "Leftover plaintext preview-store.json / audit.jsonl will be migrated into the encrypted envelope.",
     });
   }
   if (parsed.provider === "azure" && !envKeyPresent) {
@@ -164,8 +201,26 @@ function runtimeStatus() {
     }
   }
 
+  let keyBackend = "unset";
+  try {
+    keyBackend = loadOrCreateDek(DATA_DIR).backend;
+  } catch (err) {
+    writeUnlockFailure(err instanceof Error ? err.message : String(err));
+    issues.push({
+      code: "encryption_key_unlock",
+      message: "Encryption key unlock failed. The CUI store stays sealed.",
+    });
+  }
+
+  const attested = hill.getAttestation().configured;
+  const bindingOk = true;
+
   return {
-    ready: Boolean(binary),
+    ready:
+      Boolean(binary) &&
+      !issues.some((i) =>
+        ["cleartext_endpoint", "endpoint_query_token", "secret_in_codex_config"].includes(i.code),
+      ),
     host: "vite-preview",
     codex_found: Boolean(binary),
     codex_path: binary,
@@ -175,12 +230,44 @@ function runtimeStatus() {
     auth_json_exists: existsSync(authPath),
     model: parsed.model ?? null,
     model_provider: parsed.provider ?? null,
-        azure_endpoint: endpoint ?? null,
-        env_key_name: envKey ?? null,
-        env_key_present: envKeyPresent,
-        suggested_workspace: process.cwd(),
-        issues,
-      };
+    azure_endpoint: endpoint ?? null,
+    env_key_name: envKey ?? null,
+    env_key_present: envKeyPresent,
+    suggested_workspace: process.cwd(),
+    store_encrypted: storeEncryptedOnDisk(),
+    key_backend: keyBackend,
+    audit_chain_ok: auditChainOk(),
+    session_user: sessionUser(),
+    machine_bound: true,
+    machine_binding_ok: bindingOk,
+    operator_attested: attested,
+    pat_slot: patSlotPresent(DATA_DIR) ? "os-secret-store" : "unset",
+    hello_bind: helloBind(),
+    runner_allowlist: "local-codex-only",
+    issues,
+  };
+}
+
+function identityPayload() {
+  const att = hill.getAttestation();
+  let keyBackend = "machine-bound";
+  try {
+    keyBackend = loadOrCreateDek(DATA_DIR).backend;
+  } catch {
+    keyBackend = "unlock-failed";
+  }
+  return {
+    session_user: sessionUser(),
+    machine_id_present: Boolean(machineId()),
+    machine_bound: true,
+    machine_binding_ok: Boolean(machineBinding()),
+    key_backend: keyBackend,
+    store_encrypted: storeEncryptedOnDisk(),
+    audit_chain_ok: auditChainOk(),
+    operator_attestation: att,
+    pat_slot: patSlotPresent(DATA_DIR) ? "os-secret-store" : "unset",
+    hello_bind: helloBind(),
+  };
 }
 
 function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -250,8 +337,14 @@ function runCodexTurn(
     mkdirSync(workspace, { recursive: true });
     const local = parseEnvFile(ENV_LOCAL);
     const env = { ...process.env, ...local };
-    if (!env.AZURE_OPENAI_API_KEY && local.AZURE_LLM_PAT) {
-      env.AZURE_OPENAI_API_KEY = local.AZURE_LLM_PAT;
+    const slot = getPatSlot(DATA_DIR);
+    if (!env.AZURE_LLM_PAT && slot) env.AZURE_LLM_PAT = slot;
+    if (!env.AZURE_OPENAI_API_KEY && (local.AZURE_LLM_PAT || slot)) {
+      env.AZURE_OPENAI_API_KEY = local.AZURE_LLM_PAT || slot;
+    }
+    if (env.AZURE_LLM_ENDPOINT && isCleartextUrl(env.AZURE_LLM_ENDPOINT)) {
+      reject(new Error("Refusing to start Codex: Azure endpoint is cleartext HTTP. Use HTTPS."));
+      return;
     }
 
     const args = ["exec"];
@@ -319,7 +412,7 @@ function runCodexTurn(
 }
 
 async function handleSend(chatId: string, content: string, res: ServerResponse) {
-  const store = loadStore();
+  const store = loadChatStore();
   const chat = store.chats.find((c) => c.id === chatId);
   if (!chat) {
     json(res, 404, { error: "Chat not found." });
@@ -346,15 +439,40 @@ async function handleSend(chatId: string, content: string, res: ServerResponse) 
     chat.title = content.trim().replace(/\s+/g, " ").slice(0, 48) || chat.title;
   }
   chat.updated_at = user.created_at;
-  saveStore(store);
+  saveChatStore(store);
 
-  const binary = whichCodex();
+  let binary = whichCodex();
+  if (binary) {
+    try {
+      binary = assertLocalCodex(binary);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      assistant.content = error;
+      assistant.status = "error";
+      saveChatStore(store);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.write(`data: ${JSON.stringify({ kind: "accepted", message: assistant })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          chat_id: chatId,
+          message_id: assistant.id,
+          kind: "error",
+          text: error,
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+  }
   if (!binary) {
     const error =
       "The `codex` CLI was not found on PATH. Install Codex, confirm `codex --version` works, then restart Codex Desk.";
     assistant.content = error;
     assistant.status = "error";
-    saveStore(store);
+    saveChatStore(store);
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -392,7 +510,7 @@ async function handleSend(chatId: string, content: string, res: ServerResponse) 
     assistant.status = "complete";
     chat.codex_thread_id = result.threadId;
     chat.updated_at = nowIso();
-    saveStore(store);
+    saveChatStore(store);
     res.write(
       `data: ${JSON.stringify({
         chat_id: chatId,
@@ -405,7 +523,7 @@ async function handleSend(chatId: string, content: string, res: ServerResponse) 
     const text = err instanceof Error ? err.message : String(err);
     assistant.content = text;
     assistant.status = "error";
-    saveStore(store);
+    saveChatStore(store);
     res.write(
       `data: ${JSON.stringify({
         chat_id: chatId,
@@ -501,12 +619,42 @@ export function previewBridge(middlewares: Connect.Server) {
         json(res, 200, hill.listAudit());
         return;
       }
+      if (req.method === "GET" && url === "/api/identity") {
+        json(res, 200, identityPayload());
+        return;
+      }
+      if (req.method === "POST" && url === "/api/identity/attest") {
+        const body = await readJson(req);
+        json(
+          res,
+          200,
+          hill.setAttestation(
+            String(body.operator_name || ""),
+            String(body.organization || ""),
+            String(body.statement || ""),
+          ),
+        );
+        return;
+      }
+      if (req.method === "POST" && url === "/api/secrets/pat") {
+        const body = await readJson(req);
+        const backend = setPatSlot(DATA_DIR, String(body.pat || ""));
+        writeAudit("secret.slot_write", "secret", "pat", "PAT written to OS secret store (value not logged)");
+        json(res, 200, { backend });
+        return;
+      }
+      if (req.method === "DELETE" && url === "/api/secrets/pat") {
+        clearPatSlot(DATA_DIR);
+        writeAudit("secret.slot_clear", "secret", "pat", "PAT slot cleared (value not logged)");
+        json(res, 200, { ok: true });
+        return;
+      }
       if (req.method === "GET" && url === "/api/chats") {
-        json(res, 200, loadStore().chats.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
+        json(res, 200, loadChatStore().chats.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
         return;
       }
       if (req.method === "POST" && url === "/api/chats") {
-        const store = loadStore();
+        const store = loadChatStore();
         const chat: Chat = {
           id: randomUUID(),
           title: "New chat",
@@ -515,7 +663,7 @@ export function previewBridge(middlewares: Connect.Server) {
           codex_thread_id: null,
         };
         store.chats.unshift(chat);
-        saveStore(store);
+        saveChatStore(store);
         json(res, 200, chat);
         return;
       }
@@ -526,7 +674,7 @@ export function previewBridge(middlewares: Connect.Server) {
         json(
           res,
           200,
-          loadStore().messages.filter((m) => m.chat_id === chatId),
+          loadChatStore().messages.filter((m) => m.chat_id === chatId),
         );
         return;
       }
@@ -545,10 +693,10 @@ export function previewBridge(middlewares: Connect.Server) {
       const chatMatch = url.match(/^\/api\/chats\/([^/]+)$/);
       if (chatMatch && req.method === "DELETE") {
         const chatId = decodeURIComponent(chatMatch[1]);
-        const store = loadStore();
+        const store = loadChatStore();
         store.chats = store.chats.filter((c) => c.id !== chatId);
         store.messages = store.messages.filter((m) => m.chat_id !== chatId);
-        saveStore(store);
+        saveChatStore(store);
         json(res, 200, { ok: true });
         return;
       }
