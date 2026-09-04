@@ -11,11 +11,11 @@ This app never calls Azure, Grok, Cursor, or ChatGPT APIs.
 │ React UI    │ ──► │ App core     │ ──► │ Codex runner    │ ──► │ User's Codex CLI         │
 │ chats       │     │ Tauri cmds   │     │ spawn + JSONL   │     │ config.toml + env + PAT  │
 │ agents      │     │ or Vite /api │     │ hill-climb loop │     │            │             │
-└─────────────┘     └──────┬───────┘     └─────────────────┘     └─────────────┼─────────────┘
+└──────────────┘     └──────┬───────┘     └─────────────────┘     └─────────────┼─────────────┘
                            │                                                  ▼
                            ▼                                         Azure-hosted LLM
-                    SQLite + audit.jsonl                             (endpoint + PAT
-                    (treat as potential CUI)                         already in Codex)
+                    Encrypted vault                                  (endpoint + PAT
+                    (AES-256-GCM + OS key)                           already in Codex)
 ```
 
 IL5 mapping and residual risks: `SECURITY.md`. Rubric snapshot: `docs/il5/`
@@ -27,7 +27,8 @@ This architecture is **not** an ATO.
 - Endpoint + PAT stay in Codex config / env / gitignored `.env.local`.
 - Desk never writes the PAT to SQLite, audit logs, or git.
 - Token-like lines are redacted in logs and Codex stderr display.
-- CAC/PIV / enterprise SSO is **MISSING** (local OS user only).
+- Optional PAT slot is OS secret store / machine-bound wrap only.
+- Identity gate: machine-bound unlock + operator attestation (CAC/PIV still MISSING).
 
 ## Layers
 
@@ -62,16 +63,18 @@ are refused.
 
 ### Store and audit
 
-SQLite (`codex-desk.db`) plus `audit.jsonl`. Preview: `.data/preview-store.json`.
-**Plaintext on disk** (SC-28 MISSING). Unix app-data dir mode `0700`.
-No telemetry.
+Encrypted envelope `codex-desk.db.enc` / `.data/preview-store.json.enc`
+(AES-256-GCM, `CDEX1`). DEK in Windows DPAPI / OS keyring / machine-bound
+wrap (`src-tauri/src/vault.rs`, `src-preview/secure-store.ts`). Hash-chained
+audit inside the vault (`audit.rs`). Unix app-data dir mode `0700`.
+No telemetry. Runner allowlist: local Codex binary only.
 
 ## Extension points (not in this slice)
 
 | Later feature | Plug-in point |
 |---|---|
-| SQLCipher + DPAPI key | Store open path; do not invent a FIPS module |
-| CAC/PIV | Identity gate before app data unlock |
+| FIPS 140-3 CMVP evidence | Inheritance from OS / Codex / Azure — do not invent a module |
+| CAC/PIV | Strengthen identity.rs beyond session bind + attestation |
 | Tools / MCP | Codex `config.toml` only |
 | Routines / cron | Same hill-climb runner, human-gated |
 | SBOM / provenance | Follow-up on lockfiles already committed |

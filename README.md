@@ -17,8 +17,10 @@ DISA PA.** The human / AO authorizes.
 
 IL5 is **FedRAMP High + DoD overlays + architecture constraints**. High alone
 fails. Official workbooks beat blog control counts. See `SECURITY.md` for a
-theme → implementation → PASS/PARTIAL/MISSING table. Residual risks (plaintext
-SQLite, no CAC/PIV, no Desk FIPS module) are marked **MISSING** on purpose.
+theme → implementation → PASS/PARTIAL/MISSING table. Product-owned store
+encryption, hash-chained audit, TLS refusal, and the identity gate are
+implemented. AO/tenant/Azure PA items and FIPS CMVP evidence stay
+**MISSING**/external. This is not an ATO.
 
 **Shared responsibility:** you / the AO own categorization, Azure tenant IL5
 posture, endpoint+PAT handling, and the mission ATO. Codex Desk is a local
@@ -30,8 +32,8 @@ configured Azure endpoint.
 - Native desktop shell (Tauri 2 + React + TypeScript). Windows is the primary target.
 - Operator chat plus independent **agents** and **hill-climb** jobs (iterate → grade → fix until PASS/HOLD).
 - Each Codex turn is still local `codex exec --json` (resume per agent worker/grader thread).
-- Local store (SQLite / preview JSON) treated as potentially CUI-bearing. PAT never stored there.
-- Structured local audit events (no secret values).
+- Encrypted local store (AES-256-GCM, OS-backed / machine-bound DEK). PAT never stored there.
+- Hash-chained local audit events (no secret values). IL5 identity gate HOLDs workspace-write hill-climbs until attested.
 - Clear setup errors if `codex` is missing or Azure auth is incomplete.
 
 ## What this build does not do
@@ -146,7 +148,8 @@ Hill-climb worker and grader briefs include IL5 hard truths. They cannot “solv
 ## Known limits
 
 - Operator chat uses `codex exec` read-only. Hill-climb writes only if you set a workspace and enable writes; still `--ask-for-approval never`.
-- SQLite is plaintext on disk (SC-28 **MISSING**). See `SECURITY.md`.
+- Local store is encrypted at rest; Desk’s AES-256-GCM is **not** a FIPS 140-3 module. See `SECURITY.md`.
+- CAC/PIV is not shipped. Write hill-climbs require operator attestation.
 - Follow-up turns resume the Codex thread when Codex emits a `thread_id`. If resume is unavailable, the next turn starts a new exec and Codex will not see prior CLI context (the Desk transcript still has it).
 - The Vite preview host is for development in a browser. The product is the desktop app.
 - Linux/macOS are nice-to-have; they may work if `codex` is on PATH, but they are not the v0 target.
