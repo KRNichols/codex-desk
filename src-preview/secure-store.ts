@@ -21,7 +21,14 @@ export function loadStore(): StoreFile {
   if (existsSync(ENC_PATH)) {
     const { dek: key } = dek();
     const raw = open(key, readFileSync(ENC_PATH)).toString("utf8");
-    return JSON.parse(raw) as StoreFile;
+    const parsed = JSON.parse(raw) as StoreFile;
+    const filled = backfillAudit(parsed);
+    if (!auditChainOkUnchecked(filled)) {
+      const repaired = rehashAll(filled);
+      persistRaw(repaired);
+      return repaired;
+    }
+    return filled;
   }
   if (existsSync(LEGACY)) {
     const parsed = JSON.parse(readFileSync(LEGACY, "utf8")) as StoreFile;
@@ -33,12 +40,28 @@ export function loadStore(): StoreFile {
   return {};
 }
 
-export function saveStore(store: StoreFile) {
+function persistRaw(store: StoreFile) {
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
   const { dek: key } = dek();
   const blob = seal(key, Buffer.from(JSON.stringify(store), "utf8"));
   writeFileSync(ENC_PATH, blob, { mode: 0o600 });
+}
+
+export function saveStore(store: StoreFile) {
+  persistRaw(store);
   if (existsSync(LEGACY)) overwriteRemove(LEGACY);
+}
+
+function auditChainOkUnchecked(store: StoreFile): boolean {
+  const events = ([...((store.audit as AuditEvent[] | undefined) ?? [])] as AuditEvent[]).reverse();
+  let prev = GENESIS;
+  for (const event of events) {
+    if (!event.event_hash || event.prev_hash !== prev) return false;
+    const expected = eventHash(prev, event);
+    if (expected !== event.event_hash) return false;
+    prev = event.event_hash;
+  }
+  return true;
 }
 
 function overwriteRemove(filePath: string) {
@@ -58,7 +81,8 @@ export function patchStore(patch: StoreFile): StoreFile {
 }
 
 function lastHash(events: AuditEvent[]): string {
-  const chained = [...events].reverse().find((e) => e.event_hash);
+  // `events` is newest-first.
+  const chained = events.find((e) => e.event_hash && e.event_hash.length === 64);
   return chained?.event_hash || GENESIS;
 }
 
@@ -137,6 +161,19 @@ export function auditChainOk(): boolean {
   return true;
 }
 
+function rehashAll(store: StoreFile): StoreFile {
+  const list = ((store.audit as AuditEvent[] | undefined) ?? []).slice();
+  const chronological = [...list].reverse();
+  let prev = GENESIS;
+  for (const event of chronological) {
+    event.prev_hash = prev;
+    event.event_hash = eventHash(prev, event);
+    prev = event.event_hash;
+  }
+  store.audit = chronological.reverse();
+  return store;
+}
+
 export function writeUnlockFailure(reason: string) {
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
   appendFileSync(
@@ -148,6 +185,27 @@ export function writeUnlockFailure(reason: string) {
       code: reason.includes("tamper") ? "tamper_or_wrong_key" : "unlock_failed",
     })}\n`,
   );
+}
+
+function backfillAudit(store: StoreFile): StoreFile {
+  const list = ((store.audit as AuditEvent[] | undefined) ?? []).slice();
+  if (!list.length) return store;
+  const chronological = [...list].reverse();
+  let prev = GENESIS;
+  let changed = false;
+  for (const event of chronological) {
+    if (!event.prev_hash || !event.event_hash) {
+      event.prev_hash = prev;
+      event.event_hash = eventHash(prev, event);
+      changed = true;
+    }
+    prev = event.event_hash;
+  }
+  if (changed) {
+    store.audit = chronological.reverse();
+    persistRaw(store);
+  }
+  return store;
 }
 
 export function leftoverPlaintext(): boolean {
