@@ -22,6 +22,7 @@ const PAT_WRAP_FILE: &str = "pat.wrap";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyBackend {
+    #[allow(dead_code)]
     WindowsDpapi,
     OsKeyring,
     MachineBound,
