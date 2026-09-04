@@ -29,6 +29,16 @@ pub struct RuntimeStatus {
     pub env_key_name: Option<String>,
     pub env_key_present: bool,
     pub suggested_workspace: Option<String>,
+    pub store_encrypted: bool,
+    pub key_backend: Option<String>,
+    pub audit_chain_ok: bool,
+    pub session_user: String,
+    pub machine_bound: bool,
+    pub machine_binding_ok: bool,
+    pub operator_attested: bool,
+    pub pat_slot: String,
+    pub hello_bind: String,
+    pub runner_allowlist: String,
     pub issues: Vec<SetupIssue>,
 }
 
@@ -86,14 +96,14 @@ pub fn find_codex() -> Option<PathBuf> {
     let names = ["codex", "codex.exe", "codex.cmd"];
     for name in names {
         if let Ok(path) = which::which(name) {
-            return Some(path);
+            return crate::boundary::assert_local_codex(&path).ok();
         }
     }
     for dir in extra_codex_search_paths() {
         for name in names {
             let candidate = dir.join(name);
             if candidate.is_file() {
-                return Some(candidate);
+                return crate::boundary::assert_local_codex(&candidate).ok();
             }
         }
     }
@@ -134,10 +144,7 @@ fn parse_codex_config(path: &Path) -> (Option<String>, Option<String>, Option<St
             .and_then(|name| providers.get(name))
             .or_else(|| providers.get("azure"));
         if let Some(block) = chosen.and_then(|v| v.as_table()) {
-            endpoint = block
-                .get("base_url")
-                .and_then(|v| v.as_str())
-                .map(|s| redact_url(s));
+            endpoint = block.get("base_url").and_then(|v| v.as_str()).map(|s| s.to_string());
             env_key = block
                 .get("env_key")
                 .and_then(|v| v.as_str())
@@ -145,6 +152,24 @@ fn parse_codex_config(path: &Path) -> (Option<String>, Option<String>, Option<St
         }
     }
     (model, provider, endpoint, env_key)
+}
+
+fn config_embeds_secret(path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    for line in text.lines() {
+        let lower = line.to_ascii_lowercase();
+        if (lower.contains("api_key") || lower.contains("api-key") || lower.contains("access_token"))
+            && line.contains('=')
+        {
+            let value = line.split_once('=').map(|(_, v)| v.trim().trim_matches('"')).unwrap_or("");
+            if !value.is_empty() && value != "env" && !value.starts_with('$') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeStatus {
@@ -162,11 +187,15 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
 
     if endpoint.is_none() {
         if let Some(from_env) = env_lookup(&local, "AZURE_LLM_ENDPOINT") {
-            endpoint = Some(redact_url(&from_env));
+            endpoint = Some(from_env);
         }
     }
     if env_key.is_none() {
-        if env_lookup(&local, "AZURE_LLM_PAT").is_some() {
+        if env_lookup(&local, "AZURE_LLM_PAT").is_some()
+            || app_data
+                .and_then(|d| crate::keystore::get_pat_slot(d).ok().flatten())
+                .is_some()
+        {
             env_key = Some("AZURE_LLM_PAT".into());
         } else if env_lookup(&local, "AZURE_OPENAI_API_KEY").is_some() {
             env_key = Some("AZURE_OPENAI_API_KEY".into());
@@ -174,10 +203,19 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
     }
 
     let env_key_present = match env_key.as_deref() {
-        Some(name) => env_lookup(&local, name).is_some(),
+        Some(name) => {
+            env_lookup(&local, name).is_some()
+                || (name == "AZURE_LLM_PAT"
+                    && app_data
+                        .map(crate::keystore::pat_slot_present)
+                        .unwrap_or(false))
+        }
         None => {
             env_lookup(&local, "AZURE_LLM_PAT").is_some()
                 || env_lookup(&local, "AZURE_OPENAI_API_KEY").is_some()
+                || app_data
+                    .map(crate::keystore::pat_slot_present)
+                    .unwrap_or(false)
         }
     };
 
@@ -192,7 +230,7 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
         issues.push(SetupIssue {
             code: "codex_unconfigured".into(),
             message: format!(
-                "No Codex config at {}. Add config.toml (Azure endpoint) and set AZURE_LLM_PAT in the environment or .env.local.",
+                "No Codex config at {}. Add config.toml (Azure endpoint) and set AZURE_LLM_PAT in the environment or OS secret store.",
                 home.display()
             ),
         });
@@ -201,7 +239,7 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
         issues.push(SetupIssue {
             code: "azure_pat_missing".into(),
             message: format!(
-                "Codex is set to Azure, but {} is not set. Put the PAT in that environment variable — not in the repo.",
+                "Codex is set to Azure, but {} is not set. Put the PAT in that environment variable or the OS secret slot — not in the repo or SQLite.",
                 env_key.clone().unwrap_or_else(|| "AZURE_LLM_PAT".into())
             ),
         });
@@ -212,9 +250,57 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
             message: "Azure provider is selected, but no endpoint was found in Codex config.toml or AZURE_LLM_ENDPOINT.".into(),
         });
     }
+    if let Some(url) = endpoint.as_deref() {
+        if crate::boundary::is_cleartext_url(url) {
+            issues.push(SetupIssue {
+                code: "cleartext_endpoint".into(),
+                message: "Refusing a cleartext (http://) Azure endpoint. Codex must use HTTPS only.".into(),
+            });
+        }
+        if crate::boundary::url_has_query_secret(url) {
+            issues.push(SetupIssue {
+                code: "endpoint_query_token".into(),
+                message: "Refusing an endpoint that embeds a token, signature, or credentials. Use AZURE_LLM_PAT / OS secret store.".into(),
+            });
+        }
+    }
+    if config_path.is_file() && config_embeds_secret(&config_path) {
+        issues.push(SetupIssue {
+            code: "secret_in_codex_config".into(),
+            message: "Refusing a Codex config.toml that embeds an API key. Use env_key + environment or the OS secret slot.".into(),
+        });
+    }
+    if let Some(dir) = app_data {
+        if dir.join("codex-desk.db").is_file() {
+            issues.push(SetupIssue {
+                code: "plaintext_db_leftover".into(),
+                message: "A leftover plaintext SQLite file was found. Desk migrates it into the encrypted store and deletes it on unlock.".into(),
+            });
+        }
+        if dir.join("audit.jsonl").is_file() {
+            issues.push(SetupIssue {
+                code: "plaintext_audit_leftover".into(),
+                message: "A leftover plaintext audit.jsonl was found. Audit now lives only in the encrypted hash-chained store.".into(),
+            });
+        }
+    }
+    if cwd.join(".data").join("preview-store.json").is_file() {
+        issues.push(SetupIssue {
+            code: "plaintext_preview_store".into(),
+            message: "Refusing leftover plaintext preview-store.json. The Vite host now uses an encrypted envelope.".into(),
+        });
+    }
+
+    let display_endpoint = endpoint.as_deref().map(redact_url);
 
     RuntimeStatus {
-        ready: binary.is_some(),
+        ready: binary.is_some()
+            && issues.iter().all(|i| {
+                !matches!(
+                    i.code.as_str(),
+                    "cleartext_endpoint" | "endpoint_query_token" | "secret_in_codex_config"
+                )
+            }),
         host: host.to_string(),
         codex_found: binary.is_some(),
         codex_path: binary.as_ref().map(|p| p.display().to_string()),
@@ -224,10 +310,20 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
         auth_json_exists: auth_path.is_file(),
         model,
         model_provider: provider,
-        azure_endpoint: endpoint,
+        azure_endpoint: display_endpoint,
         env_key_name: env_key,
         env_key_present,
         suggested_workspace: Some(cwd.display().to_string()),
+        store_encrypted: false,
+        key_backend: None,
+        audit_chain_ok: false,
+        session_user: crate::identity::session_user(),
+        machine_bound: true,
+        machine_binding_ok: true,
+        operator_attested: false,
+        pat_slot: "unset".into(),
+        hello_bind: crate::identity::hello_bind_label().into(),
+        runner_allowlist: "local-codex-only".into(),
         issues,
     }
 }
@@ -239,13 +335,48 @@ pub fn apply_codex_env(cmd: &mut Command, app_data: Option<&Path>, cwd: &Path) {
             cmd.env(key, value);
         }
     }
-    let pat = env_lookup(&local, "AZURE_LLM_PAT");
+    let mut pat = env_lookup(&local, "AZURE_LLM_PAT");
+    if pat.is_none() {
+        if let Some(dir) = app_data {
+            pat = crate::keystore::get_pat_slot(dir).ok().flatten();
+        }
+    }
     let openai = env_lookup(&local, "AZURE_OPENAI_API_KEY");
     if openai.is_none() {
         if let Some(pat) = pat {
+            cmd.env("AZURE_LLM_PAT", &pat);
             cmd.env("AZURE_OPENAI_API_KEY", pat);
         }
     }
+}
+
+pub fn scan_store_for_secrets(conn: &rusqlite::Connection) -> Result<bool, String> {
+    let mut stmt = conn
+        .prepare("SELECT content FROM messages")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let text: String = row.get(0).map_err(|e| e.to_string())?;
+        if looks_like_stored_secret(&text) {
+            return Ok(true);
+        }
+    }
+    if let Ok(mut stmt) = conn.prepare("SELECT brief, name FROM agents") {
+        let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+        while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+            let brief: String = row.get(0).map_err(|e| e.to_string())?;
+            if looks_like_stored_secret(&brief) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn looks_like_stored_secret(text: &str) -> bool {
+    let upper = text.to_ascii_uppercase();
+    (upper.contains("AZURE_LLM_PAT=") || upper.contains("AZURE_OPENAI_API_KEY="))
+        && text.split('=').nth(1).map(|v| v.trim().len() > 8).unwrap_or(false)
 }
 
 pub fn validate_workspace(path: &str) -> Result<PathBuf, String> {
@@ -299,6 +430,8 @@ pub fn run_turn(
     opts: Option<&ExecOpts>,
     mut on_event: impl FnMut(CodexEvent),
 ) -> Result<(String, Option<String>), String> {
+    let binary = crate::boundary::assert_local_codex(binary)?;
+    let binary = binary.as_path();
     let default_dir = workspace_dir(app_data)?;
     let workdir = opts
         .map(|o| o.workdir.clone())
@@ -325,6 +458,7 @@ pub fn run_turn(
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     apply_codex_env(&mut cmd, Some(app_data), project_cwd);
+    refuse_cleartext_transport(app_data, project_cwd)?;
     apply_windows_flags(&mut cmd);
 
     let mut child = cmd.spawn().map_err(|e| {
@@ -426,6 +560,35 @@ pub fn run_turn(
     });
 
     Ok((assistant, seen_thread))
+}
+
+fn refuse_cleartext_transport(app_data: &Path, cwd: &Path) -> Result<(), String> {
+    let local = load_merged_env(Some(app_data), cwd);
+    if let Some(url) = env_lookup(&local, "AZURE_LLM_ENDPOINT") {
+        if crate::boundary::is_cleartext_url(&url) {
+            return Err("Refusing to start Codex: Azure endpoint is cleartext HTTP. Use HTTPS.".into());
+        }
+        if crate::boundary::url_has_query_secret(&url) {
+            return Err("Refusing to start Codex: endpoint embeds a token. Use AZURE_LLM_PAT instead.".into());
+        }
+    }
+    let home = default_codex_home();
+    let config_path = home.join("config.toml");
+    if config_path.is_file() {
+        let (_, _, endpoint, _) = parse_codex_config(&config_path);
+        if let Some(url) = endpoint {
+            if crate::boundary::is_cleartext_url(&url) {
+                return Err("Refusing to start Codex: config.toml base_url is cleartext HTTP.".into());
+            }
+            if crate::boundary::url_has_query_secret(&url) {
+                return Err("Refusing to start Codex: config.toml base_url embeds a credential.".into());
+            }
+        }
+        if config_embeds_secret(&config_path) {
+            return Err("Refusing to start Codex: config.toml embeds an API key.".into());
+        }
+    }
+    Ok(())
 }
 
 fn looks_like_secret_line(line: &str) -> bool {
