@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { AgentPanel } from "@/components/AgentPanel";
+import { IdentityPanel } from "@/components/IdentityPanel";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export default function App() {
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [view, setView] = useState<"desk" | "agent">("desk");
+  const [view, setView] = useState<"desk" | "agent" | "identity">("desk");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [newAgentOpen, setNewAgentOpen] = useState(false);
@@ -324,6 +325,21 @@ export default function App() {
               ))
             )}
             <p className="px-2 pb-1 pt-3 text-[11px] uppercase tracking-wider text-muted-foreground">Agents</p>
+            <button
+              className={cn(
+                "flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm",
+                view === "identity" ? "bg-accent" : "hover:bg-accent/60",
+              )}
+              onClick={() => {
+                setView("identity");
+                setSidebarOpen(false);
+              }}
+            >
+              <span className="truncate">Identity gate</span>
+              <span className="text-[10px] uppercase text-muted-foreground">
+                {status?.operator_attested ? "attested" : "HOLD"}
+              </span>
+            </button>
             {agents.map((agent) => (
               <button
                 key={agent.id}
@@ -362,7 +378,11 @@ export default function App() {
           </Button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
-              {view === "agent" ? (activeAgent?.name ?? "Agent") : (activeChat?.title ?? "Codex Desk")}
+              {view === "identity"
+                ? "IL5 identity gate"
+                : view === "agent"
+                  ? (activeAgent?.name ?? "Agent")
+                  : (activeChat?.title ?? "Codex Desk")}
             </p>
             <p className="truncate text-xs text-muted-foreground">
               User → this app → local Codex CLI → Azure-hosted model from Codex config
@@ -380,7 +400,11 @@ export default function App() {
           )}
         </header>
 
-        {view === "agent" && activeAgent ? (
+        {view === "identity" ? (
+          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+            <IdentityPanel status={status} onChange={() => void refreshStatus()} />
+          </div>
+        ) : view === "agent" && activeAgent ? (
           <AgentPanel
             agent={activeAgent}
             status={status}
@@ -390,7 +414,9 @@ export default function App() {
         <ScrollArea className="flex-1">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
             {loadError ? <ErrorNote text={loadError} /> : null}
-            {status && !status.codex_found ? <SetupPanel status={status} /> : null}
+            {status && (!status.codex_found || status.issues.length > 0) ? (
+              <SetupPanel status={status} />
+            ) : null}
             {messages.length === 0 && (status?.codex_found ?? true) ? (
               <EmptyState
                 ready={Boolean(status?.codex_found)}
@@ -506,20 +532,30 @@ function EmptyState({ ready, onOpenImprover }: { ready: boolean; onOpenImprover:
 }
 
 function SetupPanel({ status }: { status: RuntimeStatus }) {
+  const missingCli = !status.codex_found;
   return (
     <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
       <div className="mb-2 flex items-center gap-2 font-medium text-amber-200">
         <AlertTriangle className="size-4" />
-        Codex is not on PATH
+        {missingCli ? "Codex is not on PATH" : "Setup checks"}
       </div>
-      <ol className="list-decimal space-y-1 pl-5 text-amber-50/90">
-        <li>Install the Codex CLI so `codex --version` works in a terminal.</li>
-        <li>
-          Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (endpoint only; no PAT in the file).
-        </li>
-        <li>Set AZURE_LLM_PAT in your user environment or a gitignored .env.local.</li>
-        <li>Restart Codex Desk and send hello.</li>
-      </ol>
+      {missingCli ? (
+        <ol className="list-decimal space-y-1 pl-5 text-amber-50/90">
+          <li>Install the Codex CLI so `codex --version` works in a terminal.</li>
+          <li>
+            Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (HTTPS endpoint only; no PAT in the file).
+          </li>
+          <li>Set AZURE_LLM_PAT in your user environment, OS secret slot, or a gitignored .env.local.</li>
+          <li>Restart Codex Desk and send hello.</li>
+        </ol>
+      ) : null}
+      {status.issues.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-amber-50/90">
+          {status.issues.map((issue) => (
+            <li key={issue.code}>• {issue.message}</li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }
@@ -574,6 +610,8 @@ function RuntimeCard({
       <p>
         PAT env ({status.env_key_name ?? "AZURE_LLM_PAT"}): {status.env_key_present ? "set" : "missing"}
       </p>
+      <p>Store: {status.store_encrypted ? `encrypted · ${status.key_backend ?? "os-backed"}` : "not sealed yet"}</p>
+      <p>Identity: {status.operator_attested ? "attested" : "writes HOLD"} · {status.hello_bind ?? "user-session"}</p>
       {status.issues.map((issue) => (
         <p key={issue.code} className="text-amber-200">
           {issue.message}
