@@ -23,14 +23,10 @@ pub struct Message {
     pub status: String,
 }
 
-pub fn open(path: &Path) -> Result<Connection, String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create data dir: {e}"))?;
-    }
-    let conn = Connection::open(path).map_err(|e| format!("open sqlite: {e}"))?;
+pub fn migrate(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "
-        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS chats (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -50,7 +46,19 @@ pub fn open(path: &Path) -> Result<Connection, String> {
         ",
     )
     .map_err(|e| format!("migrate sqlite: {e}"))?;
-    crate::agents::migrate_agents(&conn)?;
+    crate::agents::migrate_agents(conn)?;
+    crate::audit::migrate_audit(conn)?;
+    crate::identity::migrate_identity(conn)?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn open(path: &Path) -> Result<Connection, String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create data dir: {e}"))?;
+    }
+    let conn = Connection::open(path).map_err(|e| format!("open sqlite: {e}"))?;
+    migrate(&conn)?;
     Ok(conn)
 }
 

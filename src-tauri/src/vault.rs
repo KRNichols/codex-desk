@@ -49,7 +49,7 @@ impl Vault {
 
         let enc_path = app_data.join("codex-desk.db.enc");
         let legacy = app_data.join("codex-desk.db");
-        let conn = Connection::open_in_memory().map_err(|e| format!("open memory sqlite: {e}"))?;
+        let mut conn = Connection::open_in_memory().map_err(|e| format!("open memory sqlite: {e}"))?;
 
         if enc_path.is_file() {
             let blob = fs::read(&enc_path).map_err(|e| format!("read encrypted store: {e}"))?;
@@ -57,10 +57,10 @@ impl Vault {
                 write_unlock_failure(app_data, &e);
                 format!("encryption key unlock failed: {e}")
             })?;
-            load_sqlite_bytes(&conn, &plain, app_data)?;
+            load_sqlite_bytes(&mut conn, &plain, app_data)?;
         } else if legacy.is_file() {
             let src = Connection::open(&legacy).map_err(|e| format!("open legacy sqlite: {e}"))?;
-            copy_db(&src, &conn)?;
+            copy_db(&src, &mut conn)?;
         }
 
         crate::store::migrate(&conn)?;
@@ -105,7 +105,7 @@ impl Vault {
     }
 }
 
-fn load_sqlite_bytes(dest: &Connection, bytes: &[u8], app_data: &Path) -> Result<(), String> {
+fn load_sqlite_bytes(dest: &mut Connection, bytes: &[u8], app_data: &Path) -> Result<(), String> {
     let tmp = app_data.join("codex-desk.load.tmp");
     fs::write(&tmp, bytes).map_err(|e| format!("write load tmp: {e}"))?;
     let src = Connection::open(&tmp).map_err(|e| format!("open decrypted snapshot: {e}"))?;
@@ -114,7 +114,7 @@ fn load_sqlite_bytes(dest: &Connection, bytes: &[u8], app_data: &Path) -> Result
     Ok(())
 }
 
-fn copy_db(src: &Connection, dest: &Connection) -> Result<(), String> {
+fn copy_db(src: &Connection, dest: &mut Connection) -> Result<(), String> {
     let backup = Backup::new(src, dest).map_err(|e| format!("backup load: {e}"))?;
     backup
         .run_to_completion(100, Duration::from_millis(0), None)
