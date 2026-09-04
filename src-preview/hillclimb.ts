@@ -1,20 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { execSync, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF, graderPrompt, parseGrade, workerPrompt } from "../src/lib/prompts";
-import type { Agent, AuditEvent, HillclimbIteration, HillclimbRun } from "../src/lib/types";
-
-const DATA_DIR = path.resolve(process.cwd(), ".data");
-const STORE_PATH = path.join(DATA_DIR, "preview-store.json");
-const AUDIT_PATH = path.join(DATA_DIR, "audit.jsonl");
+import type { Agent, HillclimbIteration, HillclimbRun, OperatorAttestation } from "../src/lib/types";
+import { DATA_DIR, loadStore, patchStore, writeAudit } from "./secure-store";
+import { assertLocalCodex, enforceGrade } from "./policy";
+import { sessionUser } from "./crypto";
 
 type StoreFile = {
   agents?: Agent[];
   runs?: HillclimbRun[];
   iterations?: HillclimbIteration[];
-  audit?: AuditEvent[];
+  identity?: { machine_binding: string; attestation: OperatorAttestation };
 };
 
 const cancels = new Set<string>();
@@ -24,44 +23,51 @@ function nowIso() {
 }
 
 function load(): StoreFile {
-  if (!existsSync(STORE_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(STORE_PATH, "utf8")) as StoreFile;
-  } catch {
-    return {};
-  }
+  return loadStore() as StoreFile;
 }
 
 function savePartial(patch: StoreFile) {
-  const current = load();
-  const next = { ...current, ...patch };
-  mkdirSync(DATA_DIR, { recursive: true });
-  // merge into existing preview-store without wiping chats
-  let full: Record<string, unknown> = {};
-  try {
-    full = JSON.parse(readFileSync(STORE_PATH, "utf8")) as Record<string, unknown>;
-  } catch {
-    full = {};
-  }
-  writeFileSync(STORE_PATH, JSON.stringify({ ...full, ...next }, null, 2));
+  patchStore(patch);
 }
 
 function audit(action: string, entityType: string, entityId: string, detail: string) {
-  const event: AuditEvent = {
-    id: randomUUID(),
+  writeAudit(action, entityType, entityId, detail);
+}
+
+export function getAttestation(): OperatorAttestation {
+  return (
+    load().identity?.attestation ?? {
+      configured: false,
+      operator_name: null,
+      organization: null,
+      statement: null,
+      at: null,
+    }
+  );
+}
+
+export function setAttestation(operatorName: string, organization: string, statement: string): OperatorAttestation {
+  const name = operatorName.trim();
+  const org = organization.trim();
+  const stmt = statement.trim();
+  if (!name || !org) throw new Error("Operator name and organization are required.");
+  if (stmt.length < 12) throw new Error("Attestation statement is too short.");
+  const record: OperatorAttestation = {
+    configured: true,
+    operator_name: name,
+    organization: org,
+    statement: stmt,
     at: nowIso(),
-    action,
-    actor: "local-user",
-    entity_type: entityType,
-    entity_id: entityId,
-    detail,
   };
   const store = load();
-  const list = store.audit ?? [];
-  list.unshift(event);
-  savePartial({ audit: list.slice(0, 200) });
-  mkdirSync(DATA_DIR, { recursive: true });
-  appendFileSync(AUDIT_PATH, `${JSON.stringify(event)}\n`);
+  patchStore({
+    identity: {
+      machine_binding: store.identity?.machine_binding ?? `${sessionUser()}`,
+      attestation: record,
+    },
+  });
+  writeAudit("identity.attest", "identity", "local", "operator attestation recorded (no secret values)");
+  return record;
 }
 
 export function ensureAgents(): Agent[] {
@@ -223,6 +229,11 @@ function updateAgentStatus(id: string, status: string, threads?: { worker?: stri
 export function startRun(agentId: string, goal: string, successCriteria: string, maxIterations: number, allowWrites: boolean) {
   const agent = ensureAgents().find((a) => a.id === agentId);
   if (!agent) throw new Error("Agent not found.");
+  if (allowWrites && !getAttestation().configured) {
+    throw new Error(
+      "IL5 identity gate: workspace-write hill-climbs are HOLD until an operator attestation is recorded for this machine-bound session.",
+    );
+  }
   const run: HillclimbRun = {
     id: randomUUID(),
     agent_id: agentId,
@@ -256,7 +267,7 @@ export function cancelRun(runId: string) {
 }
 
 async function loop(runId: string) {
-  const binary = whichCodex();
+  let binary = whichCodex();
   let { run } = getRun(runId);
   const agent = ensureAgents().find((a) => a.id === run.agent_id);
   if (!agent) return;
@@ -268,6 +279,17 @@ async function loop(runId: string) {
     upsertRun(run);
     updateAgentStatus(agent.id, "blocked");
     audit("secret.access_failure", "run", runId, "Codex missing (value not logged)");
+    return;
+  }
+  try {
+    binary = assertLocalCodex(binary);
+  } catch (err) {
+    run.status = "error";
+    run.last_grade = "HOLD";
+    run.last_gaps = err instanceof Error ? err.message : String(err);
+    run.updated_at = nowIso();
+    upsertRun(run);
+    updateAgentStatus(agent.id, "blocked");
     return;
   }
 
@@ -328,7 +350,7 @@ async function loop(runId: string) {
       });
       const grader = await runCodex(binary, gprompt, workdir, "read-only", agent.grader_thread_id);
       if (grader.threadId) updateAgentStatus(agent.id, "running", { grader: grader.threadId });
-      const parsed = parseGrade(grader.text);
+      const parsed = enforceGrade(worker.text, grader.text, parseGrade(grader.text).grade, parseGrade(grader.text).gaps);
       gaps = parsed.gaps;
       addIteration({
         id: randomUUID(),

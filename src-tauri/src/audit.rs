@@ -71,7 +71,7 @@ fn backfill_hashes(conn: &Connection) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let mut prev = GENESIS.to_string();
     for row in rows {
-        let (id, at, action, actor, entity_type, entity_id, detail, stored_prev, stored_hash) =
+        let (id, at, action, actor, entity_type, entity_id, detail, _stored_prev, stored_hash) =
             row.map_err(|e| e.to_string())?;
         if !stored_hash.is_empty() && stored_hash.len() == 64 {
             prev = stored_hash;
