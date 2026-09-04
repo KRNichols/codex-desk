@@ -1,0 +1,29 @@
+[package]
+name = "codex-desk"
+version = "0.1.0"
+description = "Desktop shell around the local Codex CLI"
+authors = ["Codex Desk"]
+edition = "2021"
+
+[lib]
+name = "codex_desk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+which = "7"
+toml = "0.8"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
