@@ -17,10 +17,12 @@ DISA PA.** The human / AO authorizes.
 
 IL5 is **FedRAMP High + DoD overlays + architecture constraints**. High alone
 fails. Official workbooks beat blog control counts. See `SECURITY.md` for a
-theme → implementation → PASS/PARTIAL/MISSING table. Product-owned store
-encryption, hash-chained audit, TLS refusal, and the identity gate are
-implemented. AO/tenant/Azure PA items and FIPS CMVP evidence stay
-**MISSING**/external. This is not an ATO.
+theme → implementation → product PASS vs AO MISSING tables.
+**READY** (product bar) = every product-owned row in
+`docs/il5/PRODUCT-CHECKLIST.md` is `PASS`. That is prep-ready for a
+human GRC look at this local operator shell — never an ATO.
+AO/tenant/Azure PA items and FIPS CMVP evidence stay
+**MISSING**/external.
 
 **Shared responsibility:** you / the AO own categorization, Azure tenant IL5
 posture, endpoint+PAT handling, and the mission ATO. Codex Desk is a local
@@ -48,11 +50,13 @@ You were given an Azure HTTP endpoint and a personal access token (PAT). Those s
 
 **Never** put the PAT, or an endpoint URL that embeds credentials, in source files that get committed.
 
-**Same Azure config as VS Code Codex; separate agent briefs for Desk so VS Code system prompts don’t constrain hill-climb.**
+**Same Azure config as VS Code Codex; Desk injects `briefs/OPERATOR.md` so VS Code system prompts don’t constrain chat or hill-climb.**
 
 Desk reads the shared Codex home (`CODEX_HOME` or `~/.codex` / `%USERPROFILE%\.codex`) for **provider + endpoint + PAT/env only**. It does not invent a second Azure client or require a second PAT. Operator chat uses that same Codex config.
 
-Hill-climb and multi-agent jobs inject **Desk-owned** worker and grader briefs (plus an optional per-agent brief) through the `codex exec` prompt and `--config developer_instructions=…` / `project_doc_max_bytes=0`. Desk does **not** use `--ignore-user-config` — that would drop the Azure provider. Global `AGENTS.md` / `developer_instructions` in `config.toml` stay available to the VS Code extension; keep “helpful” instruction profiles there (or in a named Codex `--profile` Desk never passes). If an older Codex CLI ignores `--config`, the same Desk system block is still the first section of the exec prompt.
+Every Desk `codex exec` (new chats and hill-climb workers/graders) injects the first-party **operator contract** in `briefs/OPERATOR.md` through the exec prompt and `--config developer_instructions=…` / `project_doc_max_bytes=0`. New agents default to that contract. Desk does **not** use `--ignore-user-config` — that would drop the Azure provider. Global `AGENTS.md` / `developer_instructions` in `config.toml` stay available to the VS Code extension; keep “helpful” instruction profiles there (or in a named Codex `--profile` Desk never passes). If an older Codex CLI ignores `--config`, the same operator contract is still the first section of the exec prompt.
+
+The operator contract is Desk-owned. It is **not** a copy of any Cursor or Grok hidden system prompt.
 
 Preferred setup:
 
@@ -153,9 +157,29 @@ Hill-climb worker and grader briefs include IL5 hard truths and a spawn/validate
 
 The UI uses the **orbital** (aero-night) console theme: charcoal/black, high-contrast type, restrained crimson actions. That name is a token, not a brand.
 
+## Console (orbital / aero-night)
+
+Live captures of the local operator shell. Theme is orbital / aero-night only.
+
+![Main chat and setup HOLD](docs/screenshots/01-setup-chat.png)
+
+Main chat / setup HOLD. Codex CLI is **FOUND**; Azure `config.toml` / PAT is **MISSING** (honest 401 path). Runtime strip shows Desk injects `briefs/OPERATOR.md`.
+
+![Agents sidebar](docs/screenshots/02-agents-list.png)
+
+Agents list plus an operator `hello` that HOLDs on Azure auth. Identity gate and Desk Improver stay HOLD until attested / configured.
+
+![Desk Improver hill-climb](docs/screenshots/03-desk-improver-hillclimb.png)
+
+Desk Improver live HOLD after a read-only hill-climb (Azure 401). Writes stay HOLD until the identity gate is attested. Export audit is on the compact identity card.
+
+![Identity / runtime strip](docs/screenshots/04-identity-gate.png)
+
+Identity gate: encrypted store, intact audit chain, PAT slot unset (never SQLite), attestation form, Export audit. Not an ATO.
+
 ## Known limits
 
-- Operator chat uses `codex exec` read-only. Hill-climb writes only if you set a workspace and enable writes; still `--ask-for-approval never`.
+- Operator chat uses `codex exec` read-only (`--sandbox read-only`). Hill-climb writes only if you set a workspace and enable writes (`--sandbox workspace-write`). Current Codex CLI (0.153+) does not accept `--ask-for-approval`.
 - Local store is encrypted at rest; Desk’s AES-256-GCM is **not** a FIPS 140-3 module. See `SECURITY.md`.
 - CAC/PIV is not shipped. Write hill-climbs require operator attestation.
 - Follow-up turns resume the Codex thread when Codex emits a `thread_id`. If resume is unavailable, the next turn starts a new exec and Codex will not see prior CLI context (the Desk transcript still has it).
