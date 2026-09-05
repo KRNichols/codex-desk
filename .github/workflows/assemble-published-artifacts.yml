@@ -1,0 +1,128 @@
+name: Assemble published artifacts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/assemble-published-artifacts.yml"
+  workflow_dispatch:
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Fetch full IL5 standard from pinned upstream
+        run: |
+          set -euo pipefail
+          mkdir -p docs/il5
+          curl -fsSL -o docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md \
+            "https://raw.githubusercontent.com/KRNichols/IL5-Agent-Protocol/da6bf2880aad20aa757b894976304271a3a50511/FEDRAMP-HIGH-IL5-STANDARD.md"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md")
+          data = p.read_bytes()
+          if not data.endswith(b"\n"):
+              data += b"\n"
+              p.write_bytes(data)
+          text = data.decode("utf-8")
+          if "*End of guide.*" not in text:
+              raise SystemExit("IL5 standard missing End of guide")
+          lines = text.splitlines()
+          if len(lines) < 1690:
+              raise SystemExit(f"IL5 standard too short: {len(lines)} lines")
+          import hashlib
+          digest = hashlib.sha256(data).hexdigest()
+          expected = "1ff1e1aef6510833745777a0f7e595bc4a74049110fd0765da4643595fb8ae1c"
+          if digest != expected:
+              raise SystemExit(f"IL5 sha256 mismatch: {digest}")
+          print(f"IL5 standard OK ({len(lines)} lines, {len(data)} bytes, sha256={digest})")
+          PY
+
+      - name: Generate package-lock.json
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Generate Cargo.lock
+        working-directory: src-tauri
+        run: cargo generate-lockfile
+
+      - name: Decode verified icon PNGs and generate Tauri icon set
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64
+          from pathlib import Path
+
+          # Only decode parts previously verified byte-identical on GitHub.
+          allow = {
+              "src-tauri__icons__128x128.png.b64",
+              "src-tauri__icons__32x32.png.b64",
+              "src-tauri__icons__Square142x142Logo.png.b64",
+              "src-tauri__icons__Square150x150Logo.png.b64",
+              "src-tauri__icons__Square30x30Logo.png.b64",
+              "src-tauri__icons__Square44x44Logo.png.b64",
+              "src-tauri__icons__Square71x71Logo.png.b64",
+              "src-tauri__icons__Square89x89Logo.png.b64",
+              "src-tauri__icons__StoreLogo.png.b64",
+          }
+          root = Path(".publish-parts")
+          wrote = 0
+          if root.is_dir():
+              for path in sorted(root.iterdir()):
+                  if path.name not in allow:
+                      continue
+                  dest = Path(path.name[: -len(".b64")].replace("__", "/"))
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  dest.write_bytes(base64.b64decode("".join(path.read_text().split())))
+                  print(f"decoded {dest} ({dest.stat().st_size} bytes)")
+                  wrote += 1
+          if wrote == 0:
+              print("no verified icon parts; icon generation will be skipped if no PNG source exists")
+          PY
+          if [ -f src-tauri/icons/128x128.png ]; then
+            npx --yes @tauri-apps/cli icon src-tauri/icons/128x128.png --output src-tauri/icons
+          fi
+
+      - name: Verify assembled artifacts
+        run: |
+          set -euo pipefail
+          test -f package-lock.json
+          python3 -c "import json; json.load(open('package-lock.json')); print('package-lock.json OK')"
+          test -f src-tauri/Cargo.lock
+          test -s src-tauri/Cargo.lock
+          test -f docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md
+          grep -q '\*End of guide\.\*' docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md
+          wc -l docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md package-lock.json src-tauri/Cargo.lock
+          test -f src-tauri/icons/32x32.png
+          test -f src-tauri/icons/128x128.png
+          test -f src-tauri/icons/icon.png
+          test -f src-tauri/icons/icon.ico
+          test -f src-tauri/icons/icon.icns
+
+      - name: Remove obsolete split pointers
+        run: |
+          rm -f docs/il5/FEDRAMP-HIGH-IL5-STANDARD.01.md \
+                docs/il5/FEDRAMP-HIGH-IL5-STANDARD.02.md \
+                docs/il5/FEDRAMP-HIGH-IL5-STANDARD.03.md
+
+      - name: Commit assembled files
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json src-tauri/Cargo.lock \
+            docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md src-tauri/icons
+          git add -u docs/il5 || true
+          if git diff --cached --quiet; then
+            echo "No assembled-file changes"
+            exit 0
+          fi
+          git commit -m "Assemble lockfiles, full IL5 standard, and Tauri icons."
+          git push
