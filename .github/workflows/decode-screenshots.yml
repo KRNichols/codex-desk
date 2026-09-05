@@ -15,21 +15,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and verify PNGs
+      - name: Assemble chunks, decode, and verify PNGs
         run: |
           python3 <<'PY'
-          import base64, hashlib, pathlib, sys
+          import base64, hashlib, pathlib, re, sys
           root = pathlib.Path("docs/screenshots/payload")
           outdir = pathlib.Path("docs/screenshots")
-          want = {
+          want_parts = {
+              "01-setup-chat.part00": "6e1cbc86f85d4d72be5d355502f88043f932ad59a775d19f98a4a79f46a970ed",
+              "01-setup-chat.part01": "d3a4eab8678774c99bf9bf6d639ad9daffe9f5a03f5f380c32ef58d1c83cf688",
+              "01-setup-chat.part02": "b942410ee70eac11393b6c158440f7b61ea08d347573531ffa0ea7db97d16200",
+              "01-setup-chat.part03": "81c64b127e0332bcc863b8f7b30402b709ac82dc05ccca81a486002a27133c7d",
+              "01-setup-chat.part04": "6da2313dab7acf41fe3bf1ee3800e021d29b4a8065a2026a702f32e89d6eeb84",
+              "02-agents-list.part00": "f0625446dc07a96c288da76fdba29d568a04ae259f4978c2874b34551a57f758",
+              "02-agents-list.part01": "baa2cdaf957b3f8d94f45e33630ca866be384c4f8bdbba3ee31f372447b1c7fb",
+              "02-agents-list.part02": "e89115a7bd750da4c05ed4b6167eadc665d446e551e4976869829fb7b106f5b7",
+              "02-agents-list.part03": "95dac8db2551fae2a406ee0a7474fe6063f5396d79e30b0d437365237ef3004f",
+              "02-agents-list.part04": "7de4907f9c3c2a9da34c3b8b9522af93f8fd3d84afcd4fbfd6d52cd6220ba6d3",
+              "03-desk-improver-hillclimb.part00": "14a0a8c86b769b442a8916ef59bf0e4881b56e688ff1a55345d6b720f52fbf36",
+              "03-desk-improver-hillclimb.part01": "84f3a81fae5969cc922df7da38fd39b59d802ea6e0307b60fa685cfe614dc6dc",
+              "03-desk-improver-hillclimb.part02": "cd54a0c17aaa7e9813538fce4ea39255f260700289cf9f36997dfbc2336c7983",
+              "03-desk-improver-hillclimb.part03": "1b9bcdcb42d54ca54c2ab35227de88fb357aed622f00ce6bfe79e306bba0759d",
+              "03-desk-improver-hillclimb.part04": "1baccd5dfe8218640240dabb28faeea2bbf37e63d7bb9d2a49930e111dd9e853",
+              "03-desk-improver-hillclimb.part05": "06a4d40cf664076c9cbcff9167a9111098c32516845050d1d1208e938ecd0058",
+              "04-identity-gate.part00": "0972fd30cb36165b6989fa3ab73600ca6ea52a9479b2ade00daf3dea94e6e7e2",
+              "04-identity-gate.part01": "0154b94c2a646038fd099a0d75890cffc083795dd7a5826f8f81118c1de39ff6",
+              "04-identity-gate.part02": "16cfb2396965f0bdaa0be5422000ca72b6877ea8087217154e3e3207f351c35a",
+              "04-identity-gate.part03": "1d1bf212c328b5446f376453e126cf1da3a715c62002d37fa5207e9388a0a3e2",
+              "04-identity-gate.part04": "c8659625daf894cd6019e434689ee2e37fccb5f620a55c77a921a08157541ba2",
+          }
+          want_pngs = {
               "01-setup-chat.png": "732bdd7e06d3086b030cb0b11777deeb934c07d593249890e1c961c355ccd639",
               "02-agents-list.png": "6bce0b81ea7dc4e41d60bc81f98f07532e14c3ac4c3252fe44ad8d18e62fd7d4",
               "03-desk-improver-hillclimb.png": "270f09cef3facfebb8a08e6a04703de975966e15ac29aade4af4709bf9175c42",
               "04-identity-gate.png": "5631d0615f9c2c701281e08f37dd30e198c35b7b3f4efdaf20b639c4847ca99a",
           }
-          for name, exp in want.items():
+          if root.exists():
+              groups = {}
+              for p in sorted(root.iterdir()):
+                  if not p.is_file():
+                      continue
+                  m = re.match(r"^(.+\.part\d+)(?:-\d+)?$", p.name)
+                  if not m:
+                      continue
+                  groups.setdefault(m.group(1), []).append(p)
+              for base, files in groups.items():
+                  files = sorted(files, key=lambda x: x.name)
+                  data = "".join(f.read_text(encoding="ascii").strip() for f in files)
+                  exp = want_parts.get(base)
+                  if not exp:
+                      continue
+                  got = hashlib.sha256(data.encode("ascii")).hexdigest()
+                  if got != exp:
+                      print("incomplete", base, len(data), [f.name for f in files])
+                      continue
+                  (root / base).write_text(data, encoding="ascii")
+                  for f in files:
+                      if f.name != base:
+                          f.unlink()
+                  print("assembled", base, len(data))
+          for name, exp in want_pngs.items():
               stem = name[: -len(".png")]
-              parts = sorted(root.glob(f"{stem}.part*"))
+              parts = [p for p in sorted(root.glob(f"{stem}.part*")) if re.fullmatch(rf"{re.escape(stem)}\.part\d+", p.name)]
               if not parts:
                   sys.exit(f"missing parts for {stem}")
               b64 = "".join(p.read_text(encoding="ascii").strip() for p in parts)
@@ -40,11 +87,11 @@ jobs:
               (outdir / name).write_bytes(data)
               print("ok", name, len(data))
           PY
-      - name: Commit PNGs
+      - name: Commit assembled parts and PNGs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/screenshots/*.png
+          git add docs/screenshots/payload docs/screenshots/*.png
           git diff --cached --quiet && exit 0
           git commit -m "Add orbital console PNGs so the README gallery renders."
           git push
