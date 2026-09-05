@@ -33,5 +33,5 @@ export function Badge({
 export function GradeBadge({ grade }: { grade?: string | null }) {
   const g = (grade ?? "").toUpperCase();
   const variant = g === "PASS" || g === "READY" ? "pass" : g === "WARN" ? "warn" : g ? "hold" : "outline";
-  return <Badge variant={variant}>{g || "—"}</Badge>;
+  return <Badge variant={variant}>{g || "IDLE"}</Badge>;
 }
