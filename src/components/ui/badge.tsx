@@ -3,15 +3,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-wide",
+  "inline-flex items-center rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em]",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary/15 text-primary",
-        secondary: "border-transparent bg-secondary text-secondary-foreground",
-        outline: "text-muted-foreground",
-        ready: "border-transparent bg-emerald-500/15 text-emerald-300",
-        warn: "border-transparent bg-amber-500/15 text-amber-300",
+        default: "border-primary/50 bg-primary/10 text-primary",
+        secondary: "border-border bg-secondary text-secondary-foreground",
+        outline: "border-border text-muted-foreground",
+        ready: "border-pass/40 bg-transparent text-pass",
+        pass: "border-pass/40 bg-transparent text-pass",
+        warn: "border-grade-warn/40 bg-transparent text-grade-warn",
+        hold: "border-hold/50 bg-hold/10 text-hold",
       },
     },
     defaultVariants: {
@@ -26,4 +28,10 @@ export function Badge({
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof badgeVariants>) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+}
+
+export function GradeBadge({ grade }: { grade?: string | null }) {
+  const g = (grade ?? "").toUpperCase();
+  const variant = g === "PASS" || g === "READY" ? "pass" : g === "WARN" ? "warn" : g ? "hold" : "outline";
+  return <Badge variant={variant}>{g || "—"}</Badge>;
 }
