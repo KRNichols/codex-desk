@@ -215,6 +215,22 @@ function runtimeStatus() {
   const attested = hill.getAttestation().configured;
   const bindingOk = true;
 
+  let configHasDeveloperInstructions = false;
+  if (existsSync(configPath)) {
+    try {
+      const raw = readFileSync(configPath, "utf8");
+      configHasDeveloperInstructions =
+        raw.includes("developer_instructions") || raw.includes("model_instructions_file");
+    } catch {
+      configHasDeveloperInstructions = false;
+    }
+  }
+  const globalAgentsMd = existsSync(path.join(home, "AGENTS.md"));
+  const globalAgentsOverride = existsSync(path.join(home, "AGENTS.override.md"));
+  const sharedProviderAuth =
+    existsSync(configPath) &&
+    Boolean(parsed.provider || endpoint || envKeyPresent || existsSync(authPath));
+
   return {
     ready:
       Boolean(binary) &&
@@ -244,6 +260,14 @@ function runtimeStatus() {
     pat_slot: patSlotPresent(DATA_DIR) ? "os-secret-store" : "unset",
     hello_bind: helloBind(),
     runner_allowlist: "local-codex-only",
+    shared_provider_auth: sharedProviderAuth,
+    shared_auth_note:
+      "Same Codex home as the VS Code Codex extension: provider + endpoint + PAT/env only.",
+    global_agents_md: globalAgentsMd,
+    global_agents_override_md: globalAgentsOverride,
+    config_has_developer_instructions: configHasDeveloperInstructions,
+    agent_jobs_override:
+      "desk-owned: --config developer_instructions + project_doc_max_bytes=0 (does not use --ignore-user-config)",
     issues,
   };
 }
