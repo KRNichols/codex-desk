@@ -7,11 +7,11 @@ The model is whatever **Azure-hosted deployment Codex is configured to use**.
 This app never calls Azure, Grok, Cursor, or ChatGPT APIs.
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌────────────────┐     ┌──────────────────────────┐
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────┐
 │ React UI    │ ──► │ App core     │ ──► │ Codex runner    │ ──► │ User's Codex CLI         │
 │ chats       │     │ Tauri cmds   │     │ spawn + JSONL   │     │ config.toml + env + PAT  │
 │ agents      │     │ or Vite /api │     │ hill-climb loop │     │            │             │
-└─────────────┘     └──────┘───────┘     └─────────────────┘     └─────────────├─────────────┘
+└─────────────┘     └──────┬───────┘     └─────────────────┘     └────────────┼─────────────┘
                            │                                                  ▼
                            ▼                                         Azure-hosted LLM
                     Encrypted vault                                  (endpoint + PAT
