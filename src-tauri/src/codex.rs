@@ -52,7 +52,8 @@ pub struct RuntimeStatus {
 pub struct ExecOpts {
     pub workdir: PathBuf,
     pub sandbox: String,
-    /// Hill-climb / multi-agent jobs only: inject Desk briefs and skip global AGENTS.md.
+    /// Hill-climb marker. Desk always injects OPERATOR.md overrides for every exec.
+    #[allow(dead_code)]
     pub desk_agent_job: bool,
 }
 
@@ -93,6 +94,7 @@ fn extra_codex_search_paths() -> Vec<PathBuf> {
     let mut extras = Vec::new();
     if let Some(home) = dirs_home() {
         extras.push(home.join(".local").join("bin"));
+        extras.push(home.join(".npm-global").join("bin"));
         extras.push(home.join("AppData").join("Roaming").join("npm"));
         extras.push(home.join("AppData").join("Local").join("fnm_multishells"));
     }
@@ -251,11 +253,11 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
             message: "The `codex` CLI was not found on PATH. Install OpenAI Codex, then restart Codex Desk.".into(),
         });
     }
-    if !config_path.is_file() && !auth_path.is_file() && !env_key_present {
+    if binary.is_some() && !config_path.is_file() && !auth_path.is_file() && !env_key_present {
         issues.push(SetupIssue {
             code: "codex_unconfigured".into(),
             message: format!(
-                "No Codex config at {}. Add config.toml (Azure endpoint) and set AZURE_LLM_PAT in the environment or OS secret store.",
+                "Codex CLI is present, but there is no Azure config at {}/config.toml and no AZURE_LLM_PAT. Exec will 401 against the default host. Add an HTTPS base_url + env_key; Desk does not call Azure itself.",
                 home.display()
             ),
         });
@@ -482,12 +484,10 @@ pub fn run_turn(
         "--skip-git-repo-check",
         "--sandbox",
         sandbox,
-        "--ask-for-approval",
-        "never",
     ]);
-    if opts.map(|o| o.desk_agent_job).unwrap_or(false) {
-        apply_desk_agent_overrides(&mut cmd);
-    }
+    // Every Desk exec injects briefs/OPERATOR.md via --config. Never --ignore-user-config
+    // (that would drop the shared Azure provider).
+    apply_desk_agent_overrides(&mut cmd);
     cmd.arg("-");
     cmd.current_dir(&workdir);
     cmd.stdin(Stdio::piped());
@@ -569,8 +569,14 @@ pub fn run_turn(
     let stderr_text = stderr_lines.join("\n");
 
     if !status.success() {
-        let detail = if !stderr_text.is_empty() {
-            redact_process_output(&stderr_text)
+        let combined = format!("{assistant}\n{stderr_text}");
+        let prefer_json = assistant.to_ascii_lowercase().contains("401")
+            || assistant.to_ascii_lowercase().contains("unauthorized")
+            || assistant.to_ascii_lowercase().contains("turn.failed");
+        let detail = if prefer_json && !assistant.is_empty() {
+            redact_process_output(&assistant)
+        } else if !stderr_text.is_empty() {
+            redact_process_output(&combined)
         } else if !assistant.is_empty() {
             redact_process_output(&assistant)
         } else {
@@ -657,7 +663,7 @@ fn explain_codex_failure(detail: &str) -> String {
     let lower = detail.to_ascii_lowercase();
     if lower.contains("401") || lower.contains("unauthorized") || lower.contains("forbidden") {
         return format!(
-            "Codex could not authenticate to the Azure-hosted model. Check AZURE_LLM_PAT (or the env_key in {home}/config.toml) and that the token is valid.\n\n{detail}",
+            "Codex ran but could not authenticate. This desk expects Azure via {home}/config.toml (HTTPS base_url + env_key) and AZURE_LLM_PAT. Without that, Codex hits a default host and 401s. Desk does not call Azure or send the PAT itself.\n\n{detail}",
             home = default_codex_home().display()
         );
     }
@@ -697,10 +703,11 @@ fn map_json_event(value: &Value) -> Option<CodexEvent> {
     if typ == "turn.failed" || typ == "error" {
         let text = value
             .get("error")
-            .and_then(|v| v.as_str())
-            .or_else(|| value.get("message").and_then(|v| v.as_str()))
-            .unwrap_or("Codex turn failed.")
-            .to_string();
+            .and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| {
+                v.get("message").and_then(|m| m.as_str()).map(|s| s.to_string())
+            }))
+            .or_else(|| value.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .unwrap_or_else(|| "Codex turn failed.".into());
         return Some(CodexEvent {
             kind: "error".into(),
             text,
