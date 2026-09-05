@@ -7,6 +7,10 @@ to use. Do not add Grok, Cursor, ChatGPT UI, or a direct Azure SDK.
 Treat transcripts, agent briefs, hill-climb logs, and workspace
 paths as **potentially CUI-bearing**.
 
+Operator + worker default brief: `briefs/OPERATOR.md`. Desk injects
+it on every `codex exec`. Do not water it with global `config.toml`
+system prompts.
+
 ## IL5 hard truths
 
 Rubric: `docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md` (snapshot of
@@ -31,8 +35,8 @@ snapshot. Do not invent control counts.
 Spawn / validate / grade / judge. Iterate toward the stated goal
 and success criteria. After each pass, leave a short summary of
 what changed and what remains. HOLD on unvalidated claims. Desk
-injects this contract via `codex exec`; do not rely on global
-`config.toml` system prompts.
+injects `briefs/OPERATOR.md` plus this contract via `codex exec`;
+do not rely on global `config.toml` system prompts.
 
 ## Hill-climb grader
 
