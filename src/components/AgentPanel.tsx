@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, GradeBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -104,15 +104,16 @@ export function AgentPanel({
   return (
     <ScrollArea className="flex-1">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
-        <section className="rounded-xl border border-border bg-card/50 p-4">
+        <section className="rounded-sm border border-border bg-card p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">{agent.name}</h2>
-            <Badge variant={agent.status === "running" ? "warn" : agent.status === "done" ? "ready" : "outline"}>
+            <Badge variant={agent.status === "running" ? "hold" : agent.status === "done" ? "pass" : "outline"}>
               {agent.status}
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Template: {agent.template}. Independent Codex worker/grader threads. Treat briefs as potential CUI.
+            Template: {agent.template}. Desk-owned worker/grader briefs via <code>codex exec</code> — not VS Code
+            system prompts. Treat briefs as potential CUI.
           </p>
           <label className="mt-3 block text-xs text-muted-foreground">Brief / contract</label>
           <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} className="mt-1 min-h-[88px] bg-background" />
@@ -133,8 +134,15 @@ export function AgentPanel({
 
         <IdentityPanel status={status} />
 
-        <section className="rounded-xl border border-border bg-card/50 p-4">
+        <section className="rounded-sm border border-border bg-card p-4">
           <h3 className="font-medium">Start hill-climb</h3>
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            Grades:
+            <GradeBadge grade="PASS" />
+            <GradeBadge grade="HOLD" />
+            <GradeBadge grade="WARN" />
+            <span>HOLD on unvalidated claims. Never an ATO.</span>
+          </p>
           <Button
             size="sm"
             variant="outline"
@@ -188,7 +196,7 @@ export function AgentPanel({
         </section>
 
         {activeRun ? (
-          <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <section className="rounded-sm border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-medium">Live run</h3>
               {running ? (
@@ -197,27 +205,28 @@ export function AgentPanel({
                 </Button>
               ) : null}
             </div>
-            <p className="mt-1 text-sm">
-              Iteration {activeRun.current_iteration}/{activeRun.max_iterations} · {activeRun.status}
-              {activeRun.last_grade ? ` · last grade ${activeRun.last_grade}` : ""}
+            <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm">
+              Iteration {activeRun.current_iteration}/{activeRun.max_iterations}
+              <Badge variant="outline">{activeRun.status}</Badge>
+              {activeRun.last_grade ? <GradeBadge grade={activeRun.last_grade} /> : null}
             </p>
             {running ? (
-              <p className="mt-2 flex items-center gap-2 text-xs text-amber-200">
+              <p className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
                 <LoaderCircle className="size-3.5 animate-spin" />
                 Codex worker/grader running in the background. Operator chat stays usable.
               </p>
             ) : null}
             {activeRun.last_gaps ? (
-              <pre className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">{activeRun.last_gaps}</pre>
+              <pre className="grade-log mt-3 whitespace-pre-wrap text-muted-foreground">{activeRun.last_gaps}</pre>
             ) : null}
             <ol className="mt-3 space-y-2 text-xs">
               {iterations.map((item) => (
-                <li key={item.id} className="rounded-md border border-border bg-background/60 p-2">
-                  <p className="font-medium">
+                <li key={item.id} className="rounded-sm border border-border bg-background p-2">
+                  <p className="flex items-center gap-2 font-medium">
                     #{item.iteration} {item.phase}
-                    {item.grade ? ` · ${item.grade}` : ""}
+                    {item.grade ? <GradeBadge grade={item.grade} /> : null}
                   </p>
-                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-muted-foreground">
+                  <pre className="grade-log mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-muted-foreground">
                     {(item.gaps || item.worker_summary || "").slice(0, 1200)}
                   </pre>
                 </li>

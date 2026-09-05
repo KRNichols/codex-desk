@@ -47,10 +47,10 @@ export function IdentityPanel({
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card/50 p-4 text-sm">
+    <section className="rounded-sm border border-border bg-card p-4 text-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="font-medium">IL5 identity gate</h3>
-        <Badge variant={identity?.operator_attestation.configured ? "ready" : "warn"}>
+        <Badge variant={identity?.operator_attestation.configured ? "pass" : "hold"}>
           {identity?.operator_attestation.configured ? "attested" : "HOLD writes"}
         </Badge>
       </div>
@@ -78,7 +78,7 @@ export function IdentityPanel({
         </p>
       ) : (
         <div className="mt-3 space-y-2">
-          <p className="text-xs text-amber-200">
+          <p className="text-xs text-hold">
             Workspace-write hill-climbs stay HOLD until you record an operator attestation for this
             machine-bound session.
           </p>
