@@ -631,13 +631,13 @@ function RuntimeCard({
       <p className="text-[11px] leading-snug text-foreground/85">
         Shared Azure home with VS Code Codex. Hill-climb uses Desk-owned briefs.
       </p>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] leading-relaxed">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-[10px] leading-snug">
         {cells.map(([k, v]) => (
           <div key={k} className="min-w-0">
-            <span className="uppercase tracking-[0.08em] text-foreground/70">{k} </span>
-            <span className="truncate text-foreground" title={v}>
+            <p className="uppercase tracking-[0.08em] text-foreground/70">{k}</p>
+            <p className="truncate text-foreground" title={v}>
               {v}
-            </span>
+            </p>
           </div>
         ))}
       </div>
