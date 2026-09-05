@@ -26,6 +26,7 @@ import {
   listMessages,
   sendMessage,
 } from "@/lib/runtime";
+import { OPERATOR_CONTRACT } from "@/lib/prompts";
 import type { Agent, Chat, Message, RuntimeStatus, StreamEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export default function App() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [newAgentOpen, setNewAgentOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
-  const [newAgentBrief, setNewAgentBrief] = useState("");
+  const [newAgentBrief, setNewAgentBrief] = useState(OPERATOR_CONTRACT);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const activeChat = useMemo(
@@ -261,7 +262,7 @@ export default function App() {
               onChange={(e) => setNewAgentName(e.target.value)}
             />
             <Textarea
-              placeholder="Short brief / contract (not a secret)"
+              placeholder="briefs/OPERATOR.md is the default Desk contract"
               value={newAgentBrief}
               onChange={(e) => setNewAgentBrief(e.target.value)}
               className="min-h-[64px]"
@@ -269,12 +270,12 @@ export default function App() {
             <Button
               size="sm"
               className="w-full"
-              disabled={!newAgentName.trim() || !newAgentBrief.trim()}
+              disabled={!newAgentName.trim()}
               onClick={() =>
                 void (async () => {
                   const created = await createAgent({
                     name: newAgentName.trim(),
-                    brief: newAgentBrief.trim(),
+                    brief: newAgentBrief.trim() || OPERATOR_CONTRACT,
                     workspace_path: status?.suggested_workspace ?? undefined,
                   });
                   setAgents(await listAgents());
@@ -282,7 +283,7 @@ export default function App() {
                   setView("agent");
                   setNewAgentOpen(false);
                   setNewAgentName("");
-                  setNewAgentBrief("");
+                  setNewAgentBrief(OPERATOR_CONTRACT);
                   setSidebarOpen(false);
                 })()
               }
@@ -618,7 +619,7 @@ function RuntimeCard({
     ["pat", `${status.env_key_name ?? "AZURE_LLM_PAT"} ${status.env_key_present ? "set" : "missing"}`],
     ["store", status.store_encrypted ? `enc ${status.key_backend ?? "os"}` : "unsealed"],
     ["ident", status.operator_attested ? "attested" : "HOLD writes"],
-    ["jobs", "desk briefs + --config"],
+    ["jobs", "OPERATOR.md + --config"],
   ];
   return (
     <div className="space-y-2 p-4 text-xs text-muted-foreground">
@@ -629,7 +630,7 @@ function RuntimeCard({
         </Badge>
       </div>
       <p className="text-[11px] leading-snug text-foreground/85">
-        Shared Azure home with VS Code Codex. Hill-climb uses Desk-owned briefs.
+        Shared Azure home with VS Code Codex. Desk injects briefs/OPERATOR.md on every exec.
       </p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-[10px] leading-snug">
         {cells.map(([k, v]) => (
