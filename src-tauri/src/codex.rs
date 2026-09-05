@@ -39,6 +39,12 @@ pub struct RuntimeStatus {
     pub pat_slot: String,
     pub hello_bind: String,
     pub runner_allowlist: String,
+    pub shared_provider_auth: bool,
+    pub shared_auth_note: String,
+    pub global_agents_md: bool,
+    pub global_agents_override_md: bool,
+    pub config_has_developer_instructions: bool,
+    pub agent_jobs_override: String,
     pub issues: Vec<SetupIssue>,
 }
 
@@ -46,6 +52,8 @@ pub struct RuntimeStatus {
 pub struct ExecOpts {
     pub workdir: PathBuf,
     pub sandbox: String,
+    /// Hill-climb / multi-agent jobs only: inject Desk briefs and skip global AGENTS.md.
+    pub desk_agent_job: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,7 +96,7 @@ fn extra_codex_search_paths() -> Vec<PathBuf> {
         extras.push(home.join("AppData").join("Roaming").join("npm"));
         extras.push(home.join("AppData").join("Local").join("fnm_multishells"));
     }
-    extras.push(PathBuf::from(r"C:\Program Files\nodejs"));
+    extras.push(PathBuf::from(r"C:\\Program Files\\nodejs"));
     extras
 }
 
@@ -125,11 +133,25 @@ fn run_version(path: &Path) -> Option<String> {
 }
 
 fn parse_codex_config(path: &Path) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    let (model, provider, endpoint, env_key, _) = parse_codex_config_full(path);
+    (model, provider, endpoint, env_key)
+}
+
+fn parse_codex_config_full(
+    path: &Path,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+) {
     let Ok(text) = std::fs::read_to_string(path) else {
-        return (None, None, None, None);
+        return (None, None, None, None, false);
     };
+    let has_dev_instructions = text.contains("developer_instructions") || text.contains("model_instructions_file");
     let Ok(value) = text.parse::<toml::Value>() else {
-        return (None, None, None, None);
+        return (None, None, None, None, has_dev_instructions);
     };
     let model = value.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
     let provider = value
@@ -151,7 +173,7 @@ fn parse_codex_config(path: &Path) -> (Option<String>, Option<String>, Option<St
                 .map(|s| s.to_string());
         }
     }
-    (model, provider, endpoint, env_key)
+    (model, provider, endpoint, env_key, has_dev_instructions)
 }
 
 fn config_embeds_secret(path: &Path) -> bool {
@@ -179,11 +201,14 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
     let home = default_codex_home();
     let config_path = home.join("config.toml");
     let auth_path = home.join("auth.json");
-    let (model, provider, mut endpoint, mut env_key) = if config_path.is_file() {
-        parse_codex_config(&config_path)
-    } else {
-        (None, None, None, None)
-    };
+    let (model, provider, mut endpoint, mut env_key, config_has_developer_instructions) =
+        if config_path.is_file() {
+            parse_codex_config_full(&config_path)
+        } else {
+            (None, None, None, None, false)
+        };
+    let global_agents_md = home.join("AGENTS.md").is_file();
+    let global_agents_override_md = home.join("AGENTS.override.md").is_file();
 
     if endpoint.is_none() {
         if let Some(from_env) = env_lookup(&local, "AZURE_LLM_ENDPOINT") {
@@ -292,6 +317,8 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
     }
 
     let display_endpoint = endpoint.as_deref().map(redact_url);
+    let shared_provider_auth = config_path.is_file()
+        && (provider.is_some() || display_endpoint.is_some() || env_key_present || auth_path.is_file());
 
     RuntimeStatus {
         ready: binary.is_some()
@@ -324,6 +351,12 @@ pub fn probe_status(app_data: Option<&Path>, cwd: &Path, host: &str) -> RuntimeS
         pat_slot: "unset".into(),
         hello_bind: crate::identity::hello_bind_label().into(),
         runner_allowlist: "local-codex-only".into(),
+        shared_provider_auth,
+        shared_auth_note: "Same Codex home as the VS Code Codex extension: provider + endpoint + PAT/env only.".into(),
+        global_agents_md,
+        global_agents_override_md,
+        config_has_developer_instructions,
+        agent_jobs_override: "desk-owned: --config developer_instructions + project_doc_max_bytes=0 (does not use --ignore-user-config)".into(),
         issues,
     }
 }
@@ -398,7 +431,7 @@ pub fn validate_workspace(path: &str) -> Result<PathBuf, String> {
             }
         }
     }
-    if canon == PathBuf::from("/") || canon == PathBuf::from(r"C:\") {
+    if canon == PathBuf::from("/") || canon == PathBuf::from(r"C:\\") {
         return Err("Refusing filesystem root as a workspace.".into());
     }
     Ok(canon)
@@ -451,8 +484,11 @@ pub fn run_turn(
         sandbox,
         "--ask-for-approval",
         "never",
-        "-",
     ]);
+    if opts.map(|o| o.desk_agent_job).unwrap_or(false) {
+        apply_desk_agent_overrides(&mut cmd);
+    }
+    cmd.arg("-");
     cmd.current_dir(&workdir);
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
@@ -560,6 +596,12 @@ pub fn run_turn(
     });
 
     Ok((assistant, seen_thread))
+}
+
+fn apply_desk_agent_overrides(cmd: &mut Command) {
+    for (key, value) in crate::prompts::desk_agent_config_overrides() {
+        cmd.arg("--config").arg(format!("{key}={value}"));
+    }
 }
 
 fn refuse_cleartext_transport(app_data: &Path, cwd: &Path) -> Result<(), String> {
