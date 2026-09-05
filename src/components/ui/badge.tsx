@@ -9,11 +9,12 @@ const badgeVariants = cva(
       variant: {
         default: "border-primary/50 bg-primary/10 text-primary",
         secondary: "border-border bg-secondary text-secondary-foreground",
-        outline: "border-border text-muted-foreground",
-        ready: "border-pass/40 bg-transparent text-pass",
-        pass: "border-pass/40 bg-transparent text-pass",
-        warn: "border-grade-warn/40 bg-transparent text-grade-warn",
-        hold: "border-hold/50 bg-hold/10 text-hold",
+        outline: "border-foreground/40 bg-secondary text-foreground",
+        ready: "border-pass/50 bg-transparent text-pass",
+        pass: "border-pass/50 bg-transparent text-pass",
+        warn: "border-grade-warn/50 bg-transparent text-grade-warn",
+        hold: "border-hold/60 bg-hold/15 text-hold",
+        idle: "border-foreground/40 bg-secondary text-foreground",
       },
     },
     defaultVariants: {
@@ -32,6 +33,7 @@ export function Badge({
 
 export function GradeBadge({ grade }: { grade?: string | null }) {
   const g = (grade ?? "").toUpperCase();
-  const variant = g === "PASS" || g === "READY" ? "pass" : g === "WARN" ? "warn" : g ? "hold" : "outline";
+  const variant =
+    g === "PASS" || g === "READY" ? "pass" : g === "WARN" ? "warn" : g ? "hold" : "idle";
   return <Badge variant={variant}>{g || "IDLE"}</Badge>;
 }
