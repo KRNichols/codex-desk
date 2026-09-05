@@ -9,9 +9,11 @@ import type { IdentityStatus, RuntimeStatus } from "@/lib/types";
 export function IdentityPanel({
   status,
   onChange,
+  compact = false,
 }: {
   status: RuntimeStatus | null;
   onChange?: () => void;
+  compact?: boolean;
 }) {
   const [identity, setIdentity] = useState<IdentityStatus | null>(null);
   const [name, setName] = useState("");
@@ -54,11 +56,12 @@ export function IdentityPanel({
           {identity?.operator_attestation.configured ? "attested" : "HOLD writes"}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-foreground/85">
         Machine-bound unlock plus operator attestation. CAC/PIV is not shipped. This is a{" "}
         {status?.hello_bind ?? identity?.hello_bind ?? "user-session"} bind, not an ATO.
       </p>
-      <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+      {compact ? null : (
+      <ul className="mt-3 space-y-1 font-mono text-xs text-foreground/85">
         <li>Session: {identity?.session_user ?? status?.session_user ?? "unknown"}</li>
         <li>
           Store:{" "}
@@ -70,11 +73,16 @@ export function IdentityPanel({
         <li>PAT slot: {status?.pat_slot ?? identity?.pat_slot ?? "unset"} (never SQLite)</li>
         <li>Egress allowlist: {status?.runner_allowlist ?? "local-codex-only"}</li>
       </ul>
+      )}
       {identity?.operator_attestation.configured ? (
         <p className="mt-3 text-xs">
           Attested as {identity.operator_attestation.operator_name} /{" "}
           {identity.operator_attestation.organization}. Workspace-write hill-climbs are allowed;
           Desk still will not auto-push.
+        </p>
+      ) : compact ? (
+        <p className="mt-3 text-xs text-hold">
+          Writes HOLD until attested. Open Identity gate to record the operator statement.
         </p>
       ) : (
         <div className="mt-3 space-y-2">
