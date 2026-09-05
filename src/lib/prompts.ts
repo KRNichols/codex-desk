@@ -114,7 +114,7 @@ No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA / FIPS-CMVP 
 `;
 
 export function tomlQuotedString(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "")}`;
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "")}"`;
 }
 
 /** Desk-owned developer_instructions for every Desk `codex exec` (chat + hill-climb). */
