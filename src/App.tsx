@@ -294,7 +294,9 @@ export default function App() {
         <Separator />
         <ScrollArea className="flex-1">
           <div className="space-y-1 p-3">
-            <p className="px-2 pb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/75">Chats</p>
+            <p className="px-2 pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
+              Chats
+            </p>
             {chats.length === 0 ? (
               <p className="px-2 py-4 text-sm text-muted-foreground">No chats yet.</p>
             ) : (
@@ -326,7 +328,9 @@ export default function App() {
                 </div>
               ))
             )}
-            <p className="px-2 pb-1 pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/75">Agents</p>
+            <p className="px-2 pb-1 pt-3 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
+              Agents
+            </p>
             <button
               className={cn(
                 "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm",
@@ -579,7 +583,7 @@ function SetupPanel({ status }: { status: RuntimeStatus }) {
 
 function ErrorNote({ text }: { text: string }) {
   return (
-    <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap">
+    <div className="rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap">
       {text}
     </div>
   );
@@ -608,14 +612,14 @@ function RuntimeCard({
   if (!status) {
     return <p className="p-4 text-xs text-muted-foreground">Checking local Codex…</p>;
   }
-  const row = (k: string, v: string) => (
-    <div key={k} className="grid grid-cols-[5.5rem_1fr] gap-2 font-mono text-[10px] leading-relaxed">
-      <span className="uppercase tracking-[0.08em] text-muted-foreground">{k}</span>
-      <span className="min-w-0 truncate text-foreground" title={v}>
-        {v}
-      </span>
-    </div>
-  );
+  const cells: [string, string][] = [
+    ["home", status.codex_home],
+    ["share", status.shared_provider_auth ? "provider+auth" : "not detected"],
+    ["pat", `${status.env_key_name ?? "AZURE_LLM_PAT"} ${status.env_key_present ? "set" : "missing"}`],
+    ["store", status.store_encrypted ? `enc ${status.key_backend ?? "os"}` : "unsealed"],
+    ["ident", status.operator_attested ? "attested" : "HOLD writes"],
+    ["jobs", "desk briefs + --config"],
+  ];
   return (
     <div className="space-y-2 p-4 text-xs text-muted-foreground">
       <div className="flex items-center justify-between">
@@ -624,18 +628,19 @@ function RuntimeCard({
           {status.codex_found ? "found" : "missing"}
         </Badge>
       </div>
-      <p className="text-[11px] leading-snug">
-        Same Azure config as VS Code Codex. Desk-owned briefs for hill-climb — global prompts do not
-        throttle the validate/grade/judge loop.
+      <p className="text-[11px] leading-snug text-foreground/85">
+        Shared Azure home with VS Code Codex. Hill-climb uses Desk-owned briefs.
       </p>
-      {row("home", status.codex_home)}
-      {row("share", status.shared_provider_auth ? "provider+auth" : "not detected")}
-      {row("model", `${status.model ?? "unset"} / ${status.model_provider ?? "unset"}`)}
-      {row("endpoint", status.azure_endpoint ?? "unset")}
-      {row("pat", `${status.env_key_name ?? "AZURE_LLM_PAT"} ${status.env_key_present ? "set" : "missing"}`)}
-      {row("override", "exec --config + prompt")}
-      {row("store", status.store_encrypted ? `enc ${status.key_backend ?? "os"}` : "unsealed")}
-      {row("ident", status.operator_attested ? "attested" : "HOLD writes")}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] leading-relaxed">
+        {cells.map(([k, v]) => (
+          <div key={k} className="min-w-0">
+            <span className="uppercase tracking-[0.08em] text-foreground/70">{k} </span>
+            <span className="truncate text-foreground" title={v}>
+              {v}
+            </span>
+          </div>
+        ))}
+      </div>
       <Button size="sm" variant="outline" onClick={onRefresh}>
         Recheck
       </Button>
