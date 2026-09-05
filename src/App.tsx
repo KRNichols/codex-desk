@@ -11,7 +11,7 @@ import {
 import { AgentPanel } from "@/components/AgentPanel";
 import { IdentityPanel } from "@/components/IdentityPanel";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge, GradeBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -219,17 +219,19 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full bg-background text-foreground">
+    <div className="flex h-full flex-col bg-background text-foreground">
+      <div className="console-rule" aria-hidden />
+      <div className="flex min-h-0 flex-1">
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-card transition-transform md:static md:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between px-4 py-4">
+        <div className="flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-primary">Codex Desk</p>
-            <h1 className="text-base font-semibold">Local Codex shell</h1>
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-primary">Codex Desk</p>
+            <h1 className="text-sm font-semibold tracking-wide">Local operator console</h1>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(false)}>
             <X />
@@ -292,7 +294,7 @@ export default function App() {
         <Separator />
         <ScrollArea className="flex-1">
           <div className="space-y-1 p-3">
-            <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Chats</p>
+            <p className="px-2 pb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/75">Chats</p>
             {chats.length === 0 ? (
               <p className="px-2 py-4 text-sm text-muted-foreground">No chats yet.</p>
             ) : (
@@ -300,7 +302,7 @@ export default function App() {
                 <div
                   key={chat.id}
                   className={cn(
-                    "group flex items-center gap-1 rounded-md px-2 py-2 text-left text-sm",
+                    "group flex items-center gap-1 rounded-sm px-2 py-2 text-left text-sm",
                     activeId === chat.id ? "bg-accent" : "hover:bg-accent/60",
                   )}
                 >
@@ -324,10 +326,10 @@ export default function App() {
                 </div>
               ))
             )}
-            <p className="px-2 pb-1 pt-3 text-[11px] uppercase tracking-wider text-muted-foreground">Agents</p>
+            <p className="px-2 pb-1 pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/75">Agents</p>
             <button
               className={cn(
-                "flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm",
+                "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm",
                 view === "identity" ? "bg-accent" : "hover:bg-accent/60",
               )}
               onClick={() => {
@@ -336,15 +338,17 @@ export default function App() {
               }}
             >
               <span className="truncate">Identity gate</span>
-              <span className="text-[10px] uppercase text-muted-foreground">
-                {status?.operator_attested ? "attested" : "HOLD"}
-              </span>
+              {status?.operator_attested ? (
+                <Badge variant="pass">attested</Badge>
+              ) : (
+                <GradeBadge grade="HOLD" />
+              )}
             </button>
             {agents.map((agent) => (
               <button
                 key={agent.id}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm",
+                  "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm",
                   view === "agent" && activeAgentId === agent.id ? "bg-accent" : "hover:bg-accent/60",
                 )}
                 onClick={() => {
@@ -354,7 +358,17 @@ export default function App() {
                 }}
               >
                 <span className="truncate">{agent.name}</span>
-                <span className="text-[10px] uppercase text-muted-foreground">{agent.status}</span>
+                <GradeBadge
+                  grade={
+                    agent.status === "blocked" || agent.status === "error"
+                      ? "HOLD"
+                      : agent.status === "done"
+                        ? "PASS"
+                        : agent.status === "running"
+                          ? "WARN"
+                          : null
+                  }
+                />
               </button>
             ))}
           </div>
@@ -372,7 +386,7 @@ export default function App() {
       ) : null}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu />
           </Button>
@@ -384,19 +398,19 @@ export default function App() {
                   ? (activeAgent?.name ?? "Agent")
                   : (activeChat?.title ?? "Codex Desk")}
             </p>
-            <p className="truncate text-xs text-muted-foreground">
-              User → this app → local Codex CLI → Azure-hosted model from Codex config
+            <p className="truncate font-mono text-[11px] text-muted-foreground">
+              User → Desk → local Codex CLI → Azure (shared Codex home)
             </p>
           </div>
           {busy ? (
-            <Badge variant="warn" className="gap-1">
+            <Badge variant="hold" className="gap-1">
               <LoaderCircle className="size-3 animate-spin" />
               Codex working
             </Badge>
           ) : status?.codex_found ? (
-            <Badge variant="ready">Codex ready</Badge>
+            <Badge variant="pass">Codex ready</Badge>
           ) : (
-            <Badge variant="warn">Setup needed</Badge>
+            <Badge variant="hold">Setup needed</Badge>
           )}
         </header>
 
@@ -433,7 +447,7 @@ export default function App() {
               <TranscriptBubble key={message.id} message={message} />
             ))}
             {statusLine ? (
-              <p className="flex items-center gap-2 text-xs text-amber-200/90">
+              <p className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
                 <LoaderCircle className="size-3.5 animate-spin" />
                 {statusLine}
               </p>
@@ -444,7 +458,7 @@ export default function App() {
         )}
 
         {view === "desk" ? (
-        <div className="border-t border-border bg-card/80 px-4 py-3">
+        <div className="border-t border-border bg-card px-4 py-3">
           <form
             className="mx-auto flex w-full max-w-3xl flex-col gap-2"
             onSubmit={(e) => {
@@ -481,6 +495,7 @@ export default function App() {
         </div>
         ) : null}
       </main>
+      </div>
     </div>
   );
 }
@@ -491,13 +506,15 @@ function TranscriptBubble({ message }: { message: Message }) {
     <article className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm",
-          isUser ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
-          message.status === "error" && "bg-destructive/15 text-destructive-foreground ring-1 ring-destructive/40",
+          "max-w-[90%] rounded-sm border px-4 py-3 text-sm leading-6",
+          isUser
+            ? "border-primary/40 bg-secondary text-foreground"
+            : "border-border bg-card text-secondary-foreground",
+          message.status === "error" && "border-hold/60 bg-hold/10 text-foreground",
         )}
       >
-        <p className="mb-1 text-[10px] uppercase tracking-wider opacity-70">
-          {isUser ? "You" : "Codex"}
+        <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          {isUser ? "Operator" : "Codex"}
           {message.status === "running" ? " · writing" : ""}
           {message.status === "error" ? " · setup or runtime error" : ""}
         </p>
@@ -509,8 +526,8 @@ function TranscriptBubble({ message }: { message: Message }) {
 
 function EmptyState({ ready, onOpenImprover }: { ready: boolean; onOpenImprover: () => void }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-8">
-      <h2 className="text-lg font-semibold">Talk to your local Codex</h2>
+    <div className="rounded-sm border border-dashed border-border bg-card px-5 py-8">
+      <h2 className="text-lg font-semibold tracking-wide">Talk to your local Codex</h2>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
         This desk is a chat shell. Each turn runs <code className="text-foreground">codex exec</code> on
         this machine. The model is whatever Azure deployment Codex already uses.
@@ -534,13 +551,13 @@ function EmptyState({ ready, onOpenImprover }: { ready: boolean; onOpenImprover:
 function SetupPanel({ status }: { status: RuntimeStatus }) {
   const missingCli = !status.codex_found;
   return (
-    <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
-      <div className="mb-2 flex items-center gap-2 font-medium text-amber-200">
+    <section className="rounded-sm border border-hold/40 bg-hold/10 px-4 py-4 text-sm">
+      <div className="mb-2 flex items-center gap-2 font-medium text-hold">
         <AlertTriangle className="size-4" />
         {missingCli ? "Codex is not on PATH" : "Setup checks"}
       </div>
       {missingCli ? (
-        <ol className="list-decimal space-y-1 pl-5 text-amber-50/90">
+        <ol className="list-decimal space-y-1 pl-5 text-foreground/90">
           <li>Install the Codex CLI so `codex --version` works in a terminal.</li>
           <li>
             Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (HTTPS endpoint only; no PAT in the file).
@@ -549,8 +566,8 @@ function SetupPanel({ status }: { status: RuntimeStatus }) {
           <li>Restart Codex Desk and send hello.</li>
         </ol>
       ) : null}
-      {status.issues.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-amber-50/90">
+      {!missingCli && status.issues.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-foreground/90">
           {status.issues.map((issue) => (
             <li key={issue.code}>• {issue.message}</li>
           ))}
@@ -591,32 +608,34 @@ function RuntimeCard({
   if (!status) {
     return <p className="p-4 text-xs text-muted-foreground">Checking local Codex…</p>;
   }
+  const row = (k: string, v: string) => (
+    <div key={k} className="grid grid-cols-[5.5rem_1fr] gap-2 font-mono text-[10px] leading-relaxed">
+      <span className="uppercase tracking-[0.08em] text-muted-foreground">{k}</span>
+      <span className="min-w-0 truncate text-foreground" title={v}>
+        {v}
+      </span>
+    </div>
+  );
   return (
     <div className="space-y-2 p-4 text-xs text-muted-foreground">
       <div className="flex items-center justify-between">
         <span className="font-medium text-foreground">Codex runtime</span>
-        <Badge variant={status.codex_found ? "ready" : "warn"}>
+        <Badge variant={status.codex_found ? "pass" : "hold"}>
           {status.codex_found ? "found" : "missing"}
         </Badge>
       </div>
-      <p>Host: {status.host}</p>
-      <p className="truncate" title={status.codex_path ?? undefined}>
-        {status.codex_path ?? "codex not on PATH"}
+      <p className="text-[11px] leading-snug">
+        Same Azure config as VS Code Codex. Desk-owned briefs for hill-climb — global prompts do not
+        throttle the validate/grade/judge loop.
       </p>
-      <p>Home: {status.codex_home}</p>
-      <p>config.toml: {status.config_toml_exists ? "yes" : "no"}</p>
-      <p>Model / provider: {status.model ?? "unset"} · {status.model_provider ?? "unset"}</p>
-      <p className="break-all">Endpoint: {status.azure_endpoint ?? "not shown until Codex or .env.local has it"}</p>
-      <p>
-        PAT env ({status.env_key_name ?? "AZURE_LLM_PAT"}): {status.env_key_present ? "set" : "missing"}
-      </p>
-      <p>Store: {status.store_encrypted ? `encrypted · ${status.key_backend ?? "os-backed"}` : "not sealed yet"}</p>
-      <p>Identity: {status.operator_attested ? "attested" : "writes HOLD"} · {status.hello_bind ?? "user-session"}</p>
-      {status.issues.map((issue) => (
-        <p key={issue.code} className="text-amber-200">
-          {issue.message}
-        </p>
-      ))}
+      {row("home", status.codex_home)}
+      {row("share", status.shared_provider_auth ? "provider+auth" : "not detected")}
+      {row("model", `${status.model ?? "unset"} / ${status.model_provider ?? "unset"}`)}
+      {row("endpoint", status.azure_endpoint ?? "unset")}
+      {row("pat", `${status.env_key_name ?? "AZURE_LLM_PAT"} ${status.env_key_present ? "set" : "missing"}`)}
+      {row("override", "exec --config + prompt")}
+      {row("store", status.store_encrypted ? `enc ${status.key_backend ?? "os"}` : "unsealed")}
+      {row("ident", status.operator_attested ? "attested" : "HOLD writes")}
       <Button size="sm" variant="outline" onClick={onRefresh}>
         Recheck
       </Button>
