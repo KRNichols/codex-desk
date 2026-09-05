@@ -163,19 +163,19 @@ Live captures of the local operator shell. Theme is orbital / aero-night only.
 
 ![Main chat and SETUP NEEDED](docs/screenshots/01-setup-chat.png)
 
-Main chat / **SETUP NEEDED**. Codex CLI is **MISSING** from PATH (not FOUND). Azure share is not detected; PAT slot unset. Identity gate **HOLD**. Desk Improver **IDLE**.
+Main chat / **SETUP NEEDED**. Codex CLI is **MISSING** from PATH (not FOUND). Azure share is not detected; PAT slot unset. **Identity / audit** **YOLO**. IDENT **session-bound YOLO**. Desk Improver **IDLE**.
 
 ![Agents sidebar](docs/screenshots/02-agents-list.png)
 
-Agents list plus operator `hello`. Banner is **SETUP NEEDED**: Codex not on PATH / runtime **MISSING**. Identity gate **HOLD**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
+Agents list plus operator `hello`. Banner is **SETUP NEEDED**: Codex not on PATH / runtime **MISSING**. **Identity / audit** **YOLO**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
 
 ![Desk Improver hill-climb](docs/screenshots/03-desk-improver-hillclimb.png)
 
-Desk Improver live **HOLD** / **ERROR** at iteration 0/3: `codex` CLI not found on PATH; hill-climb cannot start. Writes stay **HOLD** until the identity gate is attested. Export audit is on the identity card. Not an ATO.
+Desk Improver live **HOLD** / **ERROR** at iteration 0/3: `codex` CLI not found on PATH; hill-climb cannot start. **YOLO writes** when workspace path set. **Identity / audit** plus **Export audit**. Session-bound bind. Not an ATO.
 
-![Identity / runtime strip](docs/screenshots/04-identity-gate.png)
+![Identity / audit](docs/screenshots/04-identity-gate.png)
 
-Identity gate **HOLD writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), attestation form (name/org unset), Export audit. Posix-user-session bind — not an ATO.
+**Identity / audit** **YOLO writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), **Export audit**. Session-bound bind — not an ATO.
 
 ## Known limits
 
