@@ -28,6 +28,12 @@ export type RuntimeStatus = {
   pat_slot?: string;
   hello_bind?: string;
   runner_allowlist?: string;
+  shared_provider_auth?: boolean;
+  shared_auth_note?: string;
+  global_agents_md?: boolean;
+  global_agents_override_md?: boolean;
+  config_has_developer_instructions?: boolean;
+  agent_jobs_override?: string;
   issues: SetupIssue[];
 };
 
