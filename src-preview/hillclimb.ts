@@ -3,7 +3,16 @@ import { execSync, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF, graderPrompt, parseGrade, workerPrompt } from "../src/lib/prompts";
+import {
+  DESK_IMPROVER_BRIEF,
+  IL5_GRADER_BRIEF,
+  LEGACY_DESK_IMPROVER_BRIEF,
+  LEGACY_IL5_GRADER_BRIEF,
+  deskAgentExecConfigArgs,
+  graderPrompt,
+  parseGrade,
+  workerPrompt,
+} from "../src/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, OperatorAttestation } from "../src/lib/types";
 import { DATA_DIR, loadStore, patchStore, writeAudit } from "./secure-store";
 import { assertLocalCodex, enforceGrade } from "./policy";
@@ -78,6 +87,14 @@ export function ensureAgents(): Agent[] {
   }
   if (!agents.some((a) => a.template === "il5-grader")) {
     agents.push(makeAgent("IL5 Architecture Grader", IL5_GRADER_BRIEF, "il5-grader"));
+  }
+  for (const agent of agents) {
+    if (agent.template === "desk-improver" && agent.brief.trim() === LEGACY_DESK_IMPROVER_BRIEF.trim()) {
+      agent.brief = DESK_IMPROVER_BRIEF;
+    }
+    if (agent.template === "il5-grader" && agent.brief.trim() === LEGACY_IL5_GRADER_BRIEF.trim()) {
+      agent.brief = IL5_GRADER_BRIEF;
+    }
   }
   savePartial({ agents });
   return agents;
@@ -170,7 +187,7 @@ function runCodex(
     mkdirSync(workdir, { recursive: true });
     const args = ["exec"];
     if (threadId) args.push("resume", threadId);
-    args.push("--json", "--skip-git-repo-check", "--sandbox", sandbox, "--ask-for-approval", "never", "-");
+    args.push("--json", "--skip-git-repo-check", "--sandbox", sandbox, "--ask-for-approval", "never", ...deskAgentExecConfigArgs(), "-");
     const child = spawn(binary, args, {
       cwd: workdir,
       stdio: ["pipe", "pipe", "pipe"],

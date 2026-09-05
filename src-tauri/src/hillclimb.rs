@@ -150,6 +150,7 @@ fn execute_loop(
     let opts = ExecOpts {
         workdir: workdir.clone(),
         sandbox: sandbox.into(),
+        desk_agent_job: true,
     };
     let il5_mode = agent.template == "il5-grader";
 
@@ -285,6 +286,7 @@ fn execute_loop(
             Some(&ExecOpts {
                 workdir: workdir.clone(),
                 sandbox: "read-only".into(),
+                desk_agent_job: true,
             }),
             |event: CodexEvent| {
                 emit(
