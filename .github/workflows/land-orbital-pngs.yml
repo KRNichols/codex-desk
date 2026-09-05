@@ -15,6 +15,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch verified complete base64 parts
+        run: |
+          python3 <<'PY'
+          import hashlib, pathlib, urllib.request, ssl
+          root = pathlib.Path("docs/screenshots/complete")
+          root.mkdir(parents=True, exist_ok=True)
+          files = [
+              ("01-setup-chat.png.b64.00", "https://paste.rs/sgSz6", "e0c94fee7b5ba100a64061f4cd6b0922c7218e2d1592d9ac0069a15def623cf1"),
+              ("01-setup-chat.png.b64.01", "https://paste.rs/P4ro3", "19c05fe47d9ad61583285e12996cf013e9512382e4403d07f4634db6a70b4252"),
+              ("01-setup-chat.png.b64.02", "https://paste.rs/GQ6oF", "58630359fc3878ddf6777c7803fb9d2c2b3ffba227782dc799c90d1cadf2f7d8"),
+              ("01-setup-chat.png.b64.03", "https://paste.rs/4eHH9", "3bb47c996f11a5a410cbd1d3d60231ddcf0cbda8850c1bd3a21fe9bdc9cb3c53"),
+              ("01-setup-chat.png.b64.04", "https://paste.rs/hfolX", "4d4db6c5f499e153bf99c7bec746fb3d4c9f5ac498670c925d54d06f14314086"),
+              ("02-agents-list.png.b64.00", "https://paste.rs/Yses5", "81389432d28532fb62918b0ecf70f658beab0d4da7ea11ea92e1ae6a26b79843"),
+              ("02-agents-list.png.b64.01", "https://paste.rs/u2MF0", "9b32f91da3b877b56f7b5be29df747df1fde465970decbef25f9a1f6c03781a3"),
+              ("02-agents-list.png.b64.02", "https://paste.rs/5z5PT", "cca4112c53c06b19d0875e10347d2509fb4a3fa4472f12bc30d12afa45ef0ec7"),
+              ("02-agents-list.png.b64.03", "https://paste.rs/WEmEO", "8769d3bb1d1618bd6e36a543862c4bb43064a9f0f207878dfbcb5b8aa4df98d5"),
+              ("02-agents-list.png.b64.04", "https://paste.rs/15zta", "4f5e6fb2f547d40800546a09af518be0791965772b5952e6dffe9ca84f1b848c"),
+              ("03-desk-improver-hillclimb.png.b64.00", "https://paste.rs/kw0nz", "8787a12d6c8fa3e53e9ec330aa02b526573cfe5936505ae3f1379f3fa3b8bbd3"),
+              ("03-desk-improver-hillclimb.png.b64.01", "https://paste.rs/FEig7", "61b0d85884ae23ab39d8e5d04c5359b45c9f808a79a9e4f299fda0d7f83d1d19"),
+              ("03-desk-improver-hillclimb.png.b64.02", "https://paste.rs/XUQpn", "cdde45d3af4894afda7d68f5d81261476b1684582d4426140dc015c81ecf2cc9"),
+              ("03-desk-improver-hillclimb.png.b64.03", "https://paste.rs/Z7v2r", "3c9134e6ce6c4cc7491693ba3acf8fe12f6bea54c8005d3226564291bd77ab3a"),
+              ("03-desk-improver-hillclimb.png.b64.04", "https://paste.rs/OsFNi", "176fd56fa04695977bdd7d9b4f4e0f946d8aa89de229df1e6487fa7a8485d0ea"),
+              ("03-desk-improver-hillclimb.png.b64.05", "https://paste.rs/c6KeL", "996a5932d552e8b5f7d394cd2bd3dfe78f8ea4a1c0d8d2129ed1a6e84c29d3f9"),
+              ("04-identity-gate.png.b64.00", "https://paste.rs/YPXqb", "e3110d1c3c1a3d2d1b1dee98f152a6c202c93bd4fe6c244aba06e5811346baca"),
+              ("04-identity-gate.png.b64.01", "https://paste.rs/1UAD3", "c2556cf2e429cc14b3e6f48b5242c6144d9bc42d348998ff8fdbfccd3b6cf326"),
+              ("04-identity-gate.png.b64.02", "https://paste.rs/Uzz5z", "36c82cd28b21e4236688fd45f4be3aec24807e0649be632ed44a6bd10439af10"),
+              ("04-identity-gate.png.b64.03", "https://paste.rs/tmWhv", "d4c429485440896ead8588602247fcbb627f4a601a272e702b4b88f088480d54"),
+              ("04-identity-gate.png.b64.04", "https://paste.rs/UknWn", "9a699eebad4a2ef4c7cd753cf202032e42622188a8ed1befd0c4e6a18b74d4cc"),
+          ]
+          ctx = ssl.create_default_context()
+          for name, url, exp in files:
+              with urllib.request.urlopen(url, timeout=60, context=ctx) as r:
+                  data = r.read()
+              got = hashlib.sha256(data).hexdigest()
+              if got != exp:
+                  raise SystemExit(f"download hash mismatch {name} got={got}")
+              (root / name).write_bytes(data)
+              print("fetched", name, len(data), got)
+          PY
       - name: Decode verified orbital PNGs
         run: |
           python3 <<'PY'
@@ -47,7 +86,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/screenshots/01-setup-chat.png docs/screenshots/02-agents-list.png docs/screenshots/03-desk-improver-hillclimb.png docs/screenshots/04-identity-gate.png
+          git add docs/screenshots/complete docs/screenshots/01-setup-chat.png docs/screenshots/02-agents-list.png docs/screenshots/03-desk-improver-hillclimb.png docs/screenshots/04-identity-gate.png
           git diff --cached --quiet && exit 0
           git commit -m "Add orbital console PNGs for README gallery."
           git push
