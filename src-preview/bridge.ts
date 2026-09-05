@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import * as hill from "./hillclimb";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -27,6 +27,7 @@ import {
   writeAudit,
   writeUnlockFailure,
 } from "./secure-store";
+import { deskAgentExecConfigArgs, operatorChatPrompt } from "../src/lib/prompts";
 import { assertLocalCodex, isCleartextUrl, urlHasQuerySecret } from "./policy";
 
 type Chat = {
@@ -100,6 +101,15 @@ function redactUrl(url: string): string {
   return url.trim();
 }
 
+function extraCodexDirs(): string[] {
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  return [
+    path.join(home, ".npm-global", "bin"),
+    path.join(home, ".local", "bin"),
+    path.join(home, "AppData", "Roaming", "npm"),
+  ];
+}
+
 function whichCodex(): string | null {
   const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex"] : ["codex"];
   for (const name of names) {
@@ -113,6 +123,12 @@ function whichCodex(): string | null {
       if (found) return found;
     } catch {
       // keep looking
+    }
+  }
+  for (const dir of extraCodexDirs()) {
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (existsSync(candidate)) return candidate;
     }
   }
   return null;
@@ -156,10 +172,10 @@ function runtimeStatus() {
         "The `codex` CLI was not found on PATH. Install OpenAI Codex, then restart Codex Desk.",
     });
   }
-  if (!existsSync(configPath) && !existsSync(authPath) && !envKeyPresent) {
+  if (binary && !existsSync(configPath) && !existsSync(authPath) && !envKeyPresent) {
     issues.push({
       code: "codex_unconfigured",
-      message: `No Codex config at ${home}. Add config.toml (Azure endpoint) and set AZURE_LLM_PAT in the environment or .env.local.`,
+      message: `Codex CLI is present, but there is no Azure config at ${home}/config.toml and no AZURE_LLM_PAT. Exec will 401 against the default host. Add an HTTPS base_url + env_key; Desk does not call Azure itself.`,
     });
   }
   if (endpoint && isCleartextUrl(endpoint)) {
@@ -328,9 +344,18 @@ function mapJsonEvent(value: Record<string, unknown>) {
     return { kind: "status", text: "Codex started a turn…", thread_id: null };
   }
   if (typ === "turn.failed" || typ === "error") {
+    const nested =
+      value.error && typeof value.error === "object"
+        ? String((value.error as { message?: string }).message || "")
+        : "";
+    const text =
+      (typeof value.error === "string" && value.error) ||
+      nested ||
+      (typeof value.message === "string" ? value.message : "") ||
+      "Codex turn failed.";
     return {
       kind: "error",
-      text: String(value.error || value.message || "Codex turn failed."),
+      text,
       thread_id: null,
     };
   }
@@ -348,6 +373,25 @@ function mapJsonEvent(value: Record<string, unknown>) {
     }
   }
   return null;
+}
+
+function explainCodexFailure(detail: string): string {
+  const lower = detail.toLowerCase();
+  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("missing bearer")) {
+    return (
+      "Codex ran but could not authenticate. This desk expects Azure via ~/.codex/config.toml " +
+      "(HTTPS base_url + env_key) and AZURE_LLM_PAT. Without that, Codex hits a default host and 401s. " +
+      "Desk does not call Azure or send the PAT itself.\n\n" +
+      detail
+    );
+  }
+  if (lower.includes("ask-for-approval")) {
+    return (
+      "This Codex CLI rejected --ask-for-approval (removed in current Desk). Restart Codex Desk and retry.\n\n" +
+      detail
+    );
+  }
+  return detail;
 }
 
 function runCodexTurn(
@@ -378,8 +422,7 @@ function runCodexTurn(
       "--skip-git-repo-check",
       "--sandbox",
       "read-only",
-      "--ask-for-approval",
-      "never",
+      ...deskAgentExecConfigArgs(),
       "-",
     );
 
@@ -406,8 +449,12 @@ function runCodexTurn(
         const event = mapJsonEvent(value);
         if (!event) return;
         if (event.thread_id) seenThread = event.thread_id;
-        if (event.kind === "assistant" && event.text) assistant = event.text;
-        onEvent(event);
+        if ((event.kind === "assistant" || event.kind === "error") && event.text) assistant = event.text;
+        if (event.kind === "error" && /reconnecting\.\.\./i.test(event.text)) {
+          onEvent({ kind: "status", text: "Codex is retrying authentication…", thread_id: event.thread_id });
+        } else {
+          onEvent(event);
+        }
       } catch {
         assistant = assistant ? `${assistant}\n${trimmed}` : trimmed;
         onEvent({ kind: "assistant", text: assistant, thread_id: seenThread });
@@ -419,11 +466,19 @@ function runCodexTurn(
       if (line.trim()) stderr.push(line.trim());
     });
 
-    child.on("error", (err) => reject(new Error(`Failed to start Codex: ${err.message}`)));
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+    }, 45_000);
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Failed to start Codex: ${err.message}`));
+    });
     child.on("close", (code) => {
+      clearTimeout(timer);
       if (code !== 0) {
-        const detail = stderr.join("\n") || assistant || `Codex exited with status ${code}.`;
-        reject(new Error(detail));
+        const detail = assistant || stderr.join("\n") || `Codex exited with status ${code}.`;
+        reject(new Error(explainCodexFailure(detail)));
         return;
       }
       if (!assistant) {
@@ -521,7 +576,11 @@ async function handleSend(chatId: string, content: string, res: ServerResponse) 
   res.write(`data: ${JSON.stringify({ kind: "accepted", message: assistant })}\n\n`);
 
   try {
-    const result = await runCodexTurn(binary, chat.codex_thread_id, content, (event) => {
+    const result = await runCodexTurn(
+      binary,
+      chat.codex_thread_id,
+      operatorChatPrompt(content),
+      (event) => {
       res.write(
         `data: ${JSON.stringify({
           chat_id: chatId,
@@ -582,8 +641,8 @@ export function previewBridge(middlewares: Connect.Server) {
         const body = await readJson(req);
         const name = String(body.name || "").trim();
         const brief = String(body.brief || "").trim();
-        if (!name || !brief) {
-          json(res, 400, { error: "Name and brief are required." });
+        if (!name) {
+          json(res, 400, { error: "Name is required." });
           return;
         }
         json(res, 200, hill.createAgent(name, brief, body.workspace_path ? String(body.workspace_path) : undefined));
@@ -616,17 +675,23 @@ export function previewBridge(middlewares: Connect.Server) {
           json(res, 400, { error: "Goal and success criteria are required." });
           return;
         }
-        json(
-          res,
-          200,
-          hill.startRun(
-            decodeURIComponent(agentRuns[1]),
-            goal,
-            criteria,
-            Number(body.max_iterations || 3),
-            Boolean(body.allow_writes),
-          ),
-        );
+        try {
+          json(
+            res,
+            200,
+            hill.startRun(
+              decodeURIComponent(agentRuns[1]),
+              goal,
+              criteria,
+              Number(body.max_iterations || 3),
+              Boolean(body.allow_writes),
+            ),
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const hold = /identity gate|HOLD/i.test(message);
+          json(res, hold ? 409 : 400, { error: message });
+        }
         return;
       }
       const runMatch = url.match(/^\/api\/runs\/([^/]+)$/);
@@ -641,6 +706,10 @@ export function previewBridge(middlewares: Connect.Server) {
       }
       if (req.method === "GET" && url === "/api/audit") {
         json(res, 200, hill.listAudit());
+        return;
+      }
+      if (req.method === "GET" && url === "/api/audit/export") {
+        json(res, 200, { events: hill.exportAudit() });
         return;
       }
       if (req.method === "GET" && url === "/api/identity") {
