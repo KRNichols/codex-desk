@@ -7,11 +7,11 @@ The model is whatever **Azure-hosted deployment Codex is configured to use**.
 This app never calls Azure, Grok, Cursor, or ChatGPT APIs.
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────┐
+┌─────────────┐     ┌──────────────┐     ┌────────────────┐     ┌──────────────────────────┐
 │ React UI    │ ──► │ App core     │ ──► │ Codex runner    │ ──► │ User's Codex CLI         │
 │ chats       │     │ Tauri cmds   │     │ spawn + JSONL   │     │ config.toml + env + PAT  │
 │ agents      │     │ or Vite /api │     │ hill-climb loop │     │            │             │
-└──────────────┘     └──────┬───────┘     └─────────────────┘     └─────────────┼─────────────┘
+└─────────────┘     └──────┘───────┘     └─────────────────┘     └─────────────├─────────────┘
                            │                                                  ▼
                            ▼                                         Azure-hosted LLM
                     Encrypted vault                                  (endpoint + PAT
@@ -58,7 +58,9 @@ are refused.
 - Loop: worker Codex → grader Codex → PASS stop / HOLD or WARN feed gaps back
   until max or cancel.
 - Seeded templates: Desk Improver, IL5 Architecture Grader.
-- Prompts embed IL5 hard truths (`src-tauri/src/prompts.rs`, `src/lib/prompts.ts`).
+- Prompts embed IL5 hard truths plus a Desk system block (`src-tauri/src/prompts.rs`, `src/lib/prompts.ts`).
+- Agent jobs pass `--config project_doc_max_bytes=0` and `--config developer_instructions=…`. Auth still comes from the shared Codex home. Operator chat does not apply those overrides.
+- UI theme token: `orbital` (`html[data-theme=orbital]`, `src/index.css`).
 - Desk does not auto-commit or push.
 
 ### Store and audit

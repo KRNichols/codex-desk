@@ -28,12 +28,16 @@ snapshot. Do not invent control counts.
 
 ## Hill-climb worker
 
-Iterate toward the stated goal and success criteria. After each
-pass, leave a short summary of what changed and what remains.
+Spawn / validate / grade / judge. Iterate toward the stated goal
+and success criteria. After each pass, leave a short summary of
+what changed and what remains. HOLD on unvalidated claims. Desk
+injects this contract via `codex exec`; do not rely on global
+`config.toml` system prompts.
 
 ## Hill-climb grader
 
 Return `GRADE: PASS | HOLD | WARN` plus gaps. For IL5 architecture
 reviews, also emit the report block in `docs/il5/AGENTS.md`
 (`READY` is prep-ready, not authorized). `HOLD` if the rubric file
-is missing or if the change claims authorization.
+is missing, if a claim is unvalidated, or if the change claims
+authorization.

@@ -48,6 +48,12 @@ You were given an Azure HTTP endpoint and a personal access token (PAT). Those s
 
 **Never** put the PAT, or an endpoint URL that embeds credentials, in source files that get committed.
 
+**Same Azure config as VS Code Codex; separate agent briefs for Desk so VS Code system prompts don’t constrain hill-climb.**
+
+Desk reads the shared Codex home (`CODEX_HOME` or `~/.codex` / `%USERPROFILE%\.codex`) for **provider + endpoint + PAT/env only**. It does not invent a second Azure client or require a second PAT. Operator chat uses that same Codex config.
+
+Hill-climb and multi-agent jobs inject **Desk-owned** worker and grader briefs (plus an optional per-agent brief) through the `codex exec` prompt and `--config developer_instructions=…` / `project_doc_max_bytes=0`. Desk does **not** use `--ignore-user-config` — that would drop the Azure provider. Global `AGENTS.md` / `developer_instructions` in `config.toml` stay available to the VS Code extension; keep “helpful” instruction profiles there (or in a named Codex `--profile` Desk never passes). If an older Codex CLI ignores `--config`, the same Desk system block is still the first section of the exec prompt.
+
 Preferred setup:
 
 1. Put the **endpoint** in Codex’s own config (`base_url`).
@@ -143,7 +149,9 @@ Same placeholder keys as `.env.example`. Never commit it.
 7. Watch iteration N, last grade (PASS/HOLD/WARN), and gaps. Cancel anytime.
 8. Optional: run **IL5 Architecture Grader** on the same checkout. `READY`/`PASS` means prep-ready for a human GRC look — never authorized.
 
-Hill-climb worker and grader briefs include IL5 hard truths. They cannot “solve” IL5 by claiming ATO or deleting audit/secret rules.
+Hill-climb worker and grader briefs include IL5 hard truths and a spawn/validate/grade/judge contract. They HOLD on unvalidated claims and cannot “solve” IL5 by claiming ATO or deleting audit/secret rules.
+
+The UI uses the **orbital** (aero-night) console theme: charcoal/black, high-contrast type, restrained crimson actions. That name is a token, not a brand.
 
 ## Known limits
 
