@@ -324,6 +324,7 @@ fn execute_loop(
 
         let (grade, gaps) = parse_grade(&grader_text);
         let (grade, gaps) = crate::policy::enforce_grade(&worker_text, &grader_text, &grade, &gaps);
+        let (grade, gaps) = crate::policy::enforce_product_checklist(&workdir, &grade, &gaps);
         prior_gaps = Some(gaps.clone());
         let terminal = if grade == "PASS" {
             "passed"

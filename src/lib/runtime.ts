@@ -263,6 +263,17 @@ export async function listAudit(): Promise<AuditEvent[]> {
   return res.json();
 }
 
+export async function exportAudit(): Promise<AuditEvent[]> {
+  if (isTauri()) {
+    const raw = await invokeTauri<string>("export_audit");
+    return JSON.parse(raw) as AuditEvent[];
+  }
+  const res = await fetch("/api/audit/export");
+  if (!res.ok) throw new Error(await res.text());
+  const body = (await res.json()) as { events?: AuditEvent[] };
+  return body.events ?? [];
+}
+
 export async function listenHillclimb(onEvent: (event: HillclimbEvent) => void): Promise<() => void> {
   if (isTauri()) {
     const { listen } = await import("@tauri-apps/api/event");

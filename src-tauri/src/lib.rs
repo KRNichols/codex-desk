@@ -251,10 +251,11 @@ fn send_message(app: AppHandle, state: State<AppState>, chat_id: String, content
 
     std::thread::spawn(move || {
         let app_for_events = app.clone();
+        let prompt = crate::prompts::operator_chat_prompt(&trimmed);
         let result = run_turn(
             &binary,
             thread_id.as_deref(),
-            &trimmed,
+            &prompt,
             &app_data,
             &project_cwd,
             cancel,
@@ -328,6 +329,11 @@ fn list_agents(state: State<AppState>) -> Result<Vec<Agent>, String> {
 #[tauri::command]
 fn create_agent(state: State<AppState>, name: String, brief: String, workspace_path: Option<String>) -> Result<Agent, String> {
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    let brief = if brief.trim().is_empty() {
+        crate::prompts::OPERATOR_CONTRACT.to_string()
+    } else {
+        brief
+    };
     let agent = agents::create_agent(&db, &name, &brief, "custom", workspace_path.as_deref())?;
     audit::write(&db, &state.app_data, "agent.create", "agent", &agent.id, &agent.name);
     persist_locked(&mut db);
@@ -398,6 +404,21 @@ fn list_audit(state: State<AppState>) -> Result<Vec<audit::AuditEvent>, String> 
     audit::list_recent(&db, 50)
 }
 
+#[tauri::command]
+fn export_audit(state: State<AppState>) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    audit::write(
+        &db,
+        &state.app_data,
+        "audit.export",
+        "audit",
+        "local",
+        "operator exported hash-chained audit (no secret values)",
+    );
+    persist_locked(&mut db);
+    audit::export_json(&db)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -448,6 +469,7 @@ pub fn run() {
             start_hillclimb,
             cancel_hillclimb,
             list_audit,
+            export_audit,
             il5_goal_template
         ])
         .run(tauri::generate_context!())
