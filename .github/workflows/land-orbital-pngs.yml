@@ -1,0 +1,53 @@
+name: land-orbital-pngs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/screenshots/complete/**"
+      - ".github/workflows/land-orbital-pngs.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  land:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode verified orbital PNGs
+        run: |
+          python3 <<'PY'
+          import base64, hashlib, pathlib, sys
+          root = pathlib.Path("docs/screenshots/complete")
+          outdir = pathlib.Path("docs/screenshots")
+          want = {
+              "01-setup-chat.png": "732bdd7e06d3086b030cb0b11777deeb934c07d593249890e1c961c355ccd639",
+              "02-agents-list.png": "6bce0b81ea7dc4e41d60bc81f98f07532e14c3ac4c3252fe44ad8d18e62fd7d4",
+              "03-desk-improver-hillclimb.png": "270f09cef3facfebb8a08e6a04703de975966e15ac29aade4af4709bf9175c42",
+              "04-identity-gate.png": "5631d0615f9c2c701281e08f37dd30e198c35b7b3f4efdaf20b639c4847ca99a",
+          }
+          if not root.is_dir():
+              print("no complete/ dir yet")
+              sys.exit(0)
+          for name, exp in want.items():
+              parts = sorted(root.glob(name + ".b64*"))
+              if not parts:
+                  sys.exit(f"missing complete base64 for {name}")
+              b64 = "".join(p.read_text(encoding="ascii").split())
+              data = base64.b64decode(b64, validate=True)
+              got = hashlib.sha256(data).hexdigest()
+              if got != exp:
+                  sys.exit(f"hash mismatch {name} got={got}")
+              dest = outdir / name
+              dest.write_bytes(data)
+              print("ok", name, len(data), got)
+          PY
+      - name: Commit PNGs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/01-setup-chat.png docs/screenshots/02-agents-list.png docs/screenshots/03-desk-improver-hillclimb.png docs/screenshots/04-identity-gate.png
+          git diff --cached --quiet && exit 0
+          git commit -m "Add orbital console PNGs for README gallery."
+          git push
