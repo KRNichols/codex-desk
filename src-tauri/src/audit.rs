@@ -158,6 +158,11 @@ pub fn write(
     );
 }
 
+pub fn export_json(conn: &Connection) -> Result<String, String> {
+    let events = list_recent(conn, 10_000)?;
+    serde_json::to_string_pretty(&events).map_err(|e| format!("audit export: {e}"))
+}
+
 pub fn list_recent(conn: &Connection, limit: i64) -> Result<Vec<AuditEvent>, String> {
     let mut stmt = conn
         .prepare(

@@ -155,8 +155,8 @@ export function AgentPanel({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Template: {agent.template}. Desk-owned worker/grader briefs via <code>codex exec</code> — not VS Code
-            system prompts. Treat briefs as potential CUI.
+            Template: {agent.template}. Desk injects <code>briefs/OPERATOR.md</code> plus this worker brief via{" "}
+            <code>codex exec</code> — not VS Code system prompts. Treat briefs as potential CUI.
           </p>
           <label className="mt-3 block text-xs text-muted-foreground">Brief / contract</label>
           <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} className="mt-1 min-h-[88px] bg-background" />
