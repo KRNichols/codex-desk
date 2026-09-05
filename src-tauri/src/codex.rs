@@ -96,7 +96,7 @@ fn extra_codex_search_paths() -> Vec<PathBuf> {
         extras.push(home.join("AppData").join("Roaming").join("npm"));
         extras.push(home.join("AppData").join("Local").join("fnm_multishells"));
     }
-    extras.push(PathBuf::from(r"C:\\Program Files\\nodejs"));
+    extras.push(PathBuf::from(r"C:\Program Files\nodejs"));
     extras
 }
 
@@ -431,7 +431,7 @@ pub fn validate_workspace(path: &str) -> Result<PathBuf, String> {
             }
         }
     }
-    if canon == PathBuf::from("/") || canon == PathBuf::from(r"C:\\") {
+    if canon == PathBuf::from("/") || canon == PathBuf::from(r"C:\") {
         return Err("Refusing filesystem root as a workspace.".into());
     }
     Ok(canon)
