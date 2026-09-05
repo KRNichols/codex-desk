@@ -8,6 +8,7 @@ import {
   IL5_GRADER_BRIEF,
   LEGACY_DESK_IMPROVER_BRIEF,
   LEGACY_IL5_GRADER_BRIEF,
+  OPERATOR_CONTRACT,
   deskAgentExecConfigArgs,
   graderPrompt,
   parseGrade,
@@ -15,7 +16,7 @@ import {
 } from "../src/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, OperatorAttestation } from "../src/lib/types";
 import { DATA_DIR, loadStore, patchStore, writeAudit } from "./secure-store";
-import { assertLocalCodex, enforceGrade } from "./policy";
+import { assertLocalCodex, enforceGrade, enforceProductChecklist } from "./policy";
 import { sessionUser } from "./crypto";
 
 type StoreFile = {
@@ -123,7 +124,7 @@ export function listAgents() {
 
 export function createAgent(name: string, brief: string, workspace?: string) {
   const agents = ensureAgents();
-  const agent = makeAgent(name, brief, "custom", workspace);
+  const agent = makeAgent(name, brief.trim() || OPERATOR_CONTRACT, "custom", workspace);
   agents.push(agent);
   savePartial({ agents });
   audit("agent.create", "agent", agent.id, agent.name);
@@ -162,6 +163,11 @@ export function listAudit() {
   return (load().audit ?? []).slice(0, 50);
 }
 
+export function exportAudit() {
+  writeAudit("audit.export", "audit", "local", "operator exported hash-chained audit (no secret values)");
+  return (load().audit ?? []).slice();
+}
+
 function whichCodex(): string | null {
   try {
     const found = execSync(process.platform === "win32" ? "where codex" : "command -v codex", {
@@ -170,10 +176,32 @@ function whichCodex(): string | null {
     })
       .split(/\r?\n/)[0]
       ?.trim();
-    return found || null;
+    if (found) return found;
   } catch {
-    return null;
+    // fall through to extra dirs
   }
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex"] : ["codex"];
+  for (const dir of [path.join(home, ".npm-global", "bin"), path.join(home, ".local", "bin")]) {
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+function explainCodexFailure(detail: string): string {
+  const lower = detail.toLowerCase();
+  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("missing bearer")) {
+    return (
+      "Codex ran but could not authenticate. This desk expects Azure via ~/.codex/config.toml " +
+      "(HTTPS base_url + env_key) and AZURE_LLM_PAT. Without that, Codex hits a default host and 401s. " +
+      "Desk does not call Azure or send the PAT itself.\n\n" +
+      detail
+    );
+  }
+  return detail;
 }
 
 function runCodex(
@@ -187,7 +215,7 @@ function runCodex(
     mkdirSync(workdir, { recursive: true });
     const args = ["exec"];
     if (threadId) args.push("resume", threadId);
-    args.push("--json", "--skip-git-repo-check", "--sandbox", sandbox, "--ask-for-approval", "never", ...deskAgentExecConfigArgs(), "-");
+    args.push("--json", "--skip-git-repo-check", "--sandbox", sandbox, ...deskAgentExecConfigArgs(), "-");
     const child = spawn(binary, args, {
       cwd: workdir,
       stdio: ["pipe", "pipe", "pipe"],
@@ -202,17 +230,33 @@ function runCodex(
     const rl = createInterface({ input: child.stdout });
     rl.on("line", (line) => {
       try {
-        const value = JSON.parse(line) as { type?: string; thread_id?: string; item?: { type?: string; text?: string } };
+        const value = JSON.parse(line) as {
+          type?: string;
+          thread_id?: string;
+          message?: string;
+          error?: string | { message?: string };
+          item?: { type?: string; text?: string; message?: string };
+        };
         if (value.type === "thread.started" && value.thread_id) seen = value.thread_id;
         if (value.item?.type === "agent_message" && value.item.text) assistant = value.item.text;
+        if (value.type === "turn.failed" || value.type === "error") {
+          const nested = typeof value.error === "object" ? value.error?.message : value.error;
+          assistant = nested || value.message || value.item?.message || assistant;
+        }
       } catch {
         if (line.trim()) assistant = assistant ? `${assistant}\n${line}` : line;
       }
     });
     createInterface({ input: child.stderr }).on("line", (l) => l.trim() && stderr.push(l.trim()));
-    child.on("error", (err) => reject(err));
+    const timer = setTimeout(() => child.kill("SIGTERM"), 45_000);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     child.on("close", (code) => {
-      if (code !== 0) reject(new Error(stderr.join("\n") || assistant || `exit ${code}`));
+      clearTimeout(timer);
+      const detail = assistant || stderr.join("\n") || `exit ${code}`;
+      if (code !== 0) reject(new Error(explainCodexFailure(detail)));
       else resolve({ text: assistant || stderr.join("\n") || "(no reply)", threadId: seen });
     });
   });
@@ -367,7 +411,10 @@ async function loop(runId: string) {
       });
       const grader = await runCodex(binary, gprompt, workdir, "read-only", agent.grader_thread_id);
       if (grader.threadId) updateAgentStatus(agent.id, "running", { grader: grader.threadId });
-      const parsed = enforceGrade(worker.text, grader.text, parseGrade(grader.text).grade, parseGrade(grader.text).gaps);
+      const parsed = enforceProductChecklist(
+        workdir,
+        enforceGrade(worker.text, grader.text, parseGrade(grader.text).grade, parseGrade(grader.text).gaps),
+      );
       gaps = parsed.gaps;
       addIteration({
         id: randomUUID(),
