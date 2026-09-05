@@ -60,7 +60,7 @@ No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA rows may sta
 `;
 
 export function tomlQuotedString(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "")}`;
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "")}"`;
 }
 
 /** Flags for hill-climb / multi-agent `codex exec` only. Do not use `--ignore-user-config` (that drops Azure provider). */
@@ -119,7 +119,84 @@ export function graderPrompt(args: {
   il5Mode: boolean;
 }) {
   const extra = args.il5Mode
-    ? `\nThis is an IL5 architecture grade of the handed workspace/docs.\nAlso emit the report block from docs/il5/AGENTS.md (READY|HOLD|WARN).\nREADY means prep-ready for a human GRC review — never authorized.\nIf docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md is missing, HOLD.\nIf the worker claimed ATO / FedRAMP authorization / DISA PA, HOLD.\nIf the worker weakens encryption, audit hashing, secret non-storage, TLS refusal, or local-Codex-only egress, HOLD.\n`
-    : `\nGrade the worker against the success criteria only.\nIf the worker claimed ATO or dropped audit/secret/encryption rules to "pass," HOLD.\nIf Desk Improver removes the encrypted store, OS key custody, hash-chained audit, or TLS refusal, HOLD.\n`;
-  return `${DESK_AGENT_SYSTEM_BLOCK}\n\n${IL5_HARD_TRUTHS}\n\nYou are the hill-climb grader for agent "${args.agentName}".\nDesk-owned worker contract:\n${args.brief}\n\nWorkspace: ${args.workspace}\nIteration ${args.iteration}.\n\nGoal:\n${args.goal}\n\nSuccess criteria:\n${args.successCriteria}\n\nWorker summary:\n${args.workerSummary}\n${extra}\nEnd with a machine-readable line exactly like:\nGRADE: PASS\nor GRADE: HOLD\nor GRADE: WARN\n\nThen list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.\n`;
-}\n\nexport function parseGrade(text: string): { grade: string; gaps: string } {\n  let grade = "HOLD";\n  for (const line of text.split(/\\r?\\n/)) {\n    const upper = line.trim().toUpperCase();\n    if (upper.startsWith("GRADE:")) {\n      const token = upper\n        .slice(6)\n        .split(/[\\s|/]+/)\n        .find(Boolean);\n      if (token === "PASS" || token === "READY") grade = "PASS";\n      else if (token === "WARN") grade = "WARN";\n      else grade = "HOLD";\n      break;\n    }\n  }\n  const lines = text.split(/\\r?\\n/);\n  const gaps: string[] = [];\n  let take = false;\n  for (const line of lines) {\n    const trimmed = line.trim();\n    if (trimmed.toUpperCase().startsWith("GAPS")) {\n      take = true;\n      continue;\n    }\n    if (take) {\n      if (!trimmed && gaps.length) break;\n      if (trimmed) gaps.push(trimmed);\n    }\n  }\n  return { grade, gaps: gaps.length ? gaps.join("\\n") : text.slice(0, 800) };\n}\n\nexport function gradeVariant(grade?: string | null): "pass" | "hold" | "warn" | "outline" {\n  const g = (grade ?? "").toUpperCase();\n  if (g === "PASS" || g === "READY") return "pass";\n  if (g === "WARN") return "warn";\n  if (g === "HOLD") return "hold";\n  return "outline";\n}\n
+    ? `
+This is an IL5 architecture grade of the handed workspace/docs.
+Also emit the report block from docs/il5/AGENTS.md (READY|HOLD|WARN).
+READY means prep-ready for a human GRC review — never authorized.
+If docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md is missing, HOLD.
+If the worker claimed ATO / FedRAMP authorization / DISA PA, HOLD.
+If the worker weakens encryption, audit hashing, secret non-storage, TLS refusal, or local-Codex-only egress, HOLD.
+`
+    : `
+Grade the worker against the success criteria only.
+If the worker claimed ATO or dropped audit/secret/encryption rules to "pass," HOLD.
+If Desk Improver removes the encrypted store, OS key custody, hash-chained audit, or TLS refusal, HOLD.
+`;
+  return `${DESK_AGENT_SYSTEM_BLOCK}
+
+${IL5_HARD_TRUTHS}
+
+You are the hill-climb grader for agent "${args.agentName}".
+Desk-owned worker contract:
+${args.brief}
+
+Workspace: ${args.workspace}
+Iteration ${args.iteration}.
+
+Goal:
+${args.goal}
+
+Success criteria:
+${args.successCriteria}
+
+Worker summary:
+${args.workerSummary}
+${extra}
+End with a machine-readable line exactly like:
+GRADE: PASS
+or GRADE: HOLD
+or GRADE: WARN
+
+Then list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.
+`;
+}
+
+export function parseGrade(text: string): { grade: string; gaps: string } {
+  let grade = "HOLD";
+  for (const line of text.split(/\r?\n/)) {
+    const upper = line.trim().toUpperCase();
+    if (upper.startsWith("GRADE:")) {
+      const token = upper
+        .slice(6)
+        .split(/[\s|/]+/)
+        .find(Boolean);
+      if (token === "PASS" || token === "READY") grade = "PASS";
+      else if (token === "WARN") grade = "WARN";
+      else grade = "HOLD";
+      break;
+    }
+  }
+  const lines = text.split(/\r?\n/);
+  const gaps: string[] = [];
+  let take = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.toUpperCase().startsWith("GAPS")) {
+      take = true;
+      continue;
+    }
+    if (take) {
+      if (!trimmed && gaps.length) break;
+      if (trimmed) gaps.push(trimmed);
+    }
+  }
+  return { grade, gaps: gaps.length ? gaps.join("\n") : text.slice(0, 800) };
+}
+
+export function gradeVariant(grade?: string | null): "pass" | "hold" | "warn" | "outline" {
+  const g = (grade ?? "").toUpperCase();
+  if (g === "PASS" || g === "READY") return "pass";
+  if (g === "WARN") return "warn";
+  if (g === "HOLD") return "hold";
+  return "outline";
+}
