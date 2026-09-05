@@ -5,7 +5,7 @@ It is not an ATO package. Use it for GRC / 3PAO *prep* of this binary.
 
 ```
 Operator workstation
-  Codex Desk (UI + encrypted store + identity gate)
+  Codex Desk (UI + encrypted store + machine-bound identity)
        |
        | spawn only local `codex` / `codex.exe` / `codex.cmd`
        v
@@ -17,7 +17,7 @@ Operator workstation
 ```
 
 **In Desk boundary:** chat/agent UI, AES-256-GCM store, DEK custody, hash-chained
-audit, PAT slot (OS/env only), identity attestation, `codex exec` argv, hill-climb
+audit, PAT slot (OS/env only), machine-bound identity, `codex exec` argv, hill-climb
 loop, local-Codex allowlist.
 
 **Out of Desk boundary:** Azure tenant, DISA PA, CAC/PIV issuance, CMVP modules,

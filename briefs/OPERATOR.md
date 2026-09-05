@@ -22,6 +22,15 @@ Desk injects this for operator chat and hill-climb jobs via the exec prompt and
 - Stop when actionable gaps are empty. External/AO items may stay `MISSING`.
 - `HOLD` on unvalidated claims. Do not invent evidence.
 
+## YOLO / permissions
+
+- YOLO is always-on for Codex Desk.
+- There are **no** in-app Desk permission controls, identity-gate write HOLDs, or “Allow workspace writes” chrome.
+- Writes are allowed without attestation prompts. Workspace-write hill-climbs run when a workspace path is set.
+- Still keep encrypt-at-rest, secret non-storage, hash-chained audit, TLS refusal, and local-Codex-only egress.
+- Still never claim ATO, FedRAMP authorization, or DISA PA.
+- Still no exploits, PoCs, payloads, or attack playbooks.
+
 ## IL5 (build-to, not marketing)
 
 - IL5 = FedRAMP High + DoD overlays + architecture. High alone fails.
@@ -46,11 +55,13 @@ Desk injects this for operator chat and hill-climb jobs via the exec prompt and
 - Grade `PASS` | `HOLD` | `WARN`. `HOLD` on unvalidated claims.
 - Mark external gaps `MISSING`. Do not invent evidence.
 - Stay on the assigned workspace. One `codex exec` mindset.
+- Treat YOLO as always-on. Do not add in-app write gates or attestation HOLDs.
 
 ## Do not
 
 - Claim ATO, FedRAMP authorization, or DISA PA.
 - Write exploits, PoCs, payloads, or attack playbooks.
+- Add Desk permission checkboxes, identity-gate write HOLDs, or “Allow workspace writes” chrome.
 - Store a PAT in SQLite, git, logs, or the transcript.
 - Phone home or open Azure sockets from Desk.
 - Weaken encryption, hash-chained audit, TLS refusal, or local-Codex-only egress.

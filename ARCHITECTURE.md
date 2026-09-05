@@ -28,7 +28,7 @@ This architecture is **not** an ATO.
 - Desk never writes the PAT to SQLite, audit logs, or git.
 - Token-like lines are redacted in logs and Codex stderr display.
 - Optional PAT slot is OS secret store / machine-bound wrap only.
-- Identity gate: machine-bound unlock + operator attestation (CAC/PIV still MISSING).
+- Identity: machine-bound unlock + optional operator record (CAC/PIV still MISSING). YOLO writes when a workspace is set; no in-app permission gate.
 
 ## Layers
 
@@ -46,9 +46,9 @@ Events: `codex-stream`, `hillclimb-event`. Vite preview mirrors the HTTP API.
 
 Still the only model runtime. `run_turn` accepts an optional workspace +
 sandbox (`read-only` or `workspace-write`). Default chat stays read-only in
-the app-data workspace. Hill-climb writes only when the operator set a
-workspace path and checked allow-writes. Home directory and filesystem root
-are refused.
+the app-data workspace. Hill-climb is YOLO `workspace-write` whenever the
+operator set a workspace path. No Allow-writes checkbox and no attestation
+HOLD. Home directory and filesystem root are refused.
 
 ### Agents and hill-climb
 
@@ -76,7 +76,7 @@ No telemetry. Runner allowlist: local Codex binary only.
 | Later feature | Plug-in point |
 |---|---|
 | FIPS 140-3 CMVP evidence | Inheritance from OS / Codex / Azure — do not invent a module |
-| CAC/PIV | Strengthen identity.rs beyond session bind + attestation |
+| CAC/PIV | Strengthen identity.rs beyond session bind (not an in-app write gate) |
 | Tools / MCP | Codex `config.toml` only |
 | Routines / cron | Same hill-climb runner, human-gated |
 | SBOM / provenance | Follow-up on lockfiles already committed |

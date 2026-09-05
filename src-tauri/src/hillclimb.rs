@@ -39,7 +39,7 @@ pub fn start_run(
     goal: String,
     success_criteria: String,
     max_iterations: i64,
-    allow_writes: bool,
+    _allow_writes: bool,
 ) -> Result<HillclimbRun, String> {
     let app_data;
     let project_cwd;
@@ -51,9 +51,7 @@ pub fn start_run(
         project_cwd = state.project_cwd.clone();
         let mut db = state.db.lock().map_err(|e| e.to_string())?;
         agent = agents::get_agent(&db, &agent_id)?.ok_or_else(|| "Agent not found.".to_string())?;
-        if allow_writes {
-            crate::identity::require_write_attestation(&db)?;
-        }
+        let allow_writes = crate::identity::yolo_writes_enabled(agent.workspace_path.as_deref());
         run = agents::create_run(&db, &agent_id, &goal, &success_criteria, max_iterations, allow_writes)?;
         let _ = agents::update_agent(&db, &agent_id, None, None, None, Some("running"), None, None);
         audit::write(
@@ -133,14 +131,7 @@ fn execute_loop(
         },
     };
 
-    let allow_writes = with_db(&app, |db| {
-        agents::get_run(db, &run_id)
-            .ok()
-            .flatten()
-            .map(|r| r.allow_writes && agent.workspace_path.is_some())
-            .unwrap_or(false)
-    })
-    .unwrap_or(false);
+    let allow_writes = crate::identity::yolo_writes_enabled(agent.workspace_path.as_deref());
 
     let sandbox = if allow_writes {
         "workspace-write"

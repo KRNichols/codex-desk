@@ -26,7 +26,7 @@ product|audit-chain|PASS|src-tauri/src/audit.rs SHA-256 prev||fields; preview se
 product|secret-redaction|PASS|PAT never in SQLite/git; env/env_key/OS slot; audit redact; refuse config.toml keys
 product|cleartext-refusal|PASS|boundary.rs + preview policy.ts refuse http/ws and credentialed URLs
 product|egress-allowlist|PASS|local codex/codex.exe/codex.cmd only; remote/UNC/URL spawn fail closed
-product|identity-gate|PASS|identity.rs HOLDs workspace-write hill-climbs until operator attestation
+product|identity-gate|PASS|identity.rs machine-bound session bind; YOLO writes when workspace set (no attestation HOLD / no in-app permission chrome)
 product|no-phone-home|PASS|No analytics, crash phone-home, or Desk-owned Azure SDK
 product|lockfiles|PASS|package-lock.json + src-tauri/Cargo.lock committed
 product|sbom-note|PASS|docs/il5/SBOM.md lockfile-derived component list (not a signed provenance attestation)
