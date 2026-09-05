@@ -1,0 +1,50 @@
+name: decode-screenshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/screenshots/payload/**"
+      - ".github/workflows/decode-screenshots.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and verify PNGs
+        run: |
+          python3 <<'PY'
+          import base64, hashlib, pathlib, sys
+          root = pathlib.Path("docs/screenshots/payload")
+          outdir = pathlib.Path("docs/screenshots")
+          want = {
+              "01-setup-chat.png": "732bdd7e06d3086b030cb0b11777deeb934c07d593249890e1c961c355ccd639",
+              "02-agents-list.png": "6bce0b81ea7dc4e41d60bc81f98f07532e14c3ac4c3252fe44ad8d18e62fd7d4",
+              "03-desk-improver-hillclimb.png": "270f09cef3facfebb8a08e6a04703de975966e15ac29aade4af4709bf9175c42",
+              "04-identity-gate.png": "5631d0615f9c2c701281e08f37dd30e198c35b7b3f4efdaf20b639c4847ca99a",
+          }
+          for name, exp in want.items():
+              stem = name[: -len(".png")]
+              parts = sorted(root.glob(f"{stem}.part*"))
+              if not parts:
+                  sys.exit(f"missing parts for {stem}")
+              b64 = "".join(p.read_text(encoding="ascii").strip() for p in parts)
+              data = base64.b64decode(b64, validate=True)
+              got = hashlib.sha256(data).hexdigest()
+              if got != exp:
+                  sys.exit(f"hash mismatch {name} got={got}")
+              (outdir / name).write_bytes(data)
+              print("ok", name, len(data))
+          PY
+      - name: Commit PNGs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/*.png
+          git diff --cached --quiet && exit 0
+          git commit -m "Add orbital console PNGs so the README gallery renders."
+          git push
