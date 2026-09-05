@@ -163,19 +163,19 @@ Live captures of the local operator shell. Theme is orbital / aero-night only.
 
 ![Main chat and SETUP NEEDED](docs/screenshots/01-setup-chat.png)
 
-Main chat / **SETUP NEEDED**. Codex CLI is **MISSING** from PATH (not FOUND). Azure share is not detected; PAT slot unset. **Identity / audit** **YOLO**. IDENT **session-bound YOLO**. Desk Improver **IDLE**.
+Main chat / **SETUP NEEDED**. Codex is not on PATH (runtime **MISSING**, not FOUND). Share not detected; PAT `AZURE_LLM_PAT` miss… Store enc machine-bound. **Identity / audit** **YOLO**. IDENT **session-bound YOLO**. Desk Improver and IL5 Architecture Grader **IDLE**.
 
 ![Agents sidebar](docs/screenshots/02-agents-list.png)
 
-Agents list plus operator `hello`. Banner is **SETUP NEEDED**: Codex not on PATH / runtime **MISSING**. **Identity / audit** **YOLO**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
+Agents list plus operator `hello`. Banner **SETUP NEEDED**. Codex is not on PATH / runtime **MISSING**. Transcript: OPERATOR `hello`, then **CODEX · SETUP OR RUNTIME ERROR** — `codex` CLI was not found on PATH. **Identity / audit** **YOLO**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
 
 ![Desk Improver hill-climb](docs/screenshots/03-desk-improver-hillclimb.png)
 
-Desk Improver live **HOLD** / **ERROR** at iteration 0/3: `codex` CLI not found on PATH; hill-climb cannot start. **YOLO writes** when workspace path set. **Identity / audit** plus **Export audit**. Session-bound bind. Not an ATO.
+Desk Improver live run iteration 0/3 **ERROR** **HOLD**: `codex` CLI was not found on PATH; hill-climb cannot start. That HOLD is CLI-missing, not a write gate. **Identity / audit** **YOLO WRITES**. Workspace path `/workspace`. YOLO always-on when a workspace is set; no attestation form. Runtime **MISSING**. Not an ATO.
 
 ![Identity / audit](docs/screenshots/04-identity-gate.png)
 
-**Identity / audit** **YOLO writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), **Export audit**. Session-bound bind — not an ATO.
+**Identity / audit** **YOLO WRITES** under **SETUP NEEDED** / Codex runtime **MISSING**. Session ubuntu. Store encrypted (machine-bound). Audit chain intact. PAT slot unset (never SQLite). Egress allowlist local-codex-only. **Export audit**. No attestation form. Posix-user-session bind — not an ATO.
 
 ## Known limits
 
