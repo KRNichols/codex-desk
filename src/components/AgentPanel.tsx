@@ -104,12 +104,49 @@ export function AgentPanel({
   return (
     <ScrollArea className="flex-1">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+        {activeRun ? (
+          <section className="rounded-sm border border-hold/40 bg-hold/10 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium">Live run</h3>
+              {running ? (
+                <Button size="sm" variant="outline" onClick={() => void cancelHillclimb(activeRun.id)}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm">
+              Iteration {activeRun.current_iteration}/{activeRun.max_iterations}
+              <Badge variant="outline">{activeRun.status}</Badge>
+              {activeRun.last_grade ? <GradeBadge grade={activeRun.last_grade} /> : <GradeBadge grade="HOLD" />}
+            </p>
+            {running ? (
+              <p className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+                <LoaderCircle className="size-3.5 animate-spin" />
+                Codex worker/grader running in the background. Operator chat stays usable.
+              </p>
+            ) : null}
+            {activeRun.last_gaps ? (
+              <pre className="grade-log mt-3 whitespace-pre-wrap text-foreground">{activeRun.last_gaps}</pre>
+            ) : null}
+          </section>
+        ) : null}
+
+        <IdentityPanel status={status} compact />
+
         <section className="rounded-sm border border-border bg-card p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">{agent.name}</h2>
-            <Badge variant={agent.status === "running" ? "hold" : agent.status === "done" ? "pass" : "outline"}>
-              {agent.status}
-            </Badge>
+            <GradeBadge
+              grade={
+                agent.status === "blocked" || agent.status === "error"
+                  ? "HOLD"
+                  : agent.status === "done"
+                    ? "PASS"
+                    : agent.status === "running"
+                      ? "WARN"
+                      : null
+              }
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Template: {agent.template}. Desk-owned worker/grader briefs via <code>codex exec</code> — not VS Code
@@ -131,8 +168,6 @@ export function AgentPanel({
             Save agent
           </Button>
         </section>
-
-        <IdentityPanel status={status} />
 
         <section className="rounded-sm border border-border bg-card p-4">
           <h3 className="font-medium">Start hill-climb</h3>
@@ -195,44 +230,20 @@ export function AgentPanel({
           </Button>
         </section>
 
-        {activeRun ? (
-          <section className="rounded-sm border border-border bg-card p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-medium">Live run</h3>
-              {running ? (
-                <Button size="sm" variant="outline" onClick={() => void cancelHillclimb(activeRun.id)}>
-                  Cancel
-                </Button>
-              ) : null}
-            </div>
-            <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm">
-              Iteration {activeRun.current_iteration}/{activeRun.max_iterations}
-              <Badge variant="outline">{activeRun.status}</Badge>
-              {activeRun.last_grade ? <GradeBadge grade={activeRun.last_grade} /> : null}
-            </p>
-            {running ? (
-              <p className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-                <LoaderCircle className="size-3.5 animate-spin" />
-                Codex worker/grader running in the background. Operator chat stays usable.
-              </p>
-            ) : null}
-            {activeRun.last_gaps ? (
-              <pre className="grade-log mt-3 whitespace-pre-wrap text-muted-foreground">{activeRun.last_gaps}</pre>
-            ) : null}
-            <ol className="mt-3 space-y-2 text-xs">
-              {iterations.map((item) => (
-                <li key={item.id} className="rounded-sm border border-border bg-background p-2">
-                  <p className="flex items-center gap-2 font-medium">
-                    #{item.iteration} {item.phase}
-                    {item.grade ? <GradeBadge grade={item.grade} /> : null}
-                  </p>
-                  <pre className="grade-log mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-muted-foreground">
-                    {(item.gaps || item.worker_summary || "").slice(0, 1200)}
-                  </pre>
-                </li>
-              ))}
-            </ol>
-          </section>
+        {iterations.length > 0 ? (
+          <ol className="space-y-2 text-xs">
+            {iterations.map((item) => (
+              <li key={item.id} className="rounded-sm border border-border bg-card p-2">
+                <p className="flex items-center gap-2 font-medium">
+                  #{item.iteration} {item.phase}
+                  {item.grade ? <GradeBadge grade={item.grade} /> : null}
+                </p>
+                <pre className="grade-log mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-foreground/80">
+                  {(item.gaps || item.worker_summary || "").slice(0, 1200)}
+                </pre>
+              </li>
+            ))}
+          </ol>
         ) : null}
 
         <section>
@@ -243,9 +254,15 @@ export function AgentPanel({
             <ul className="space-y-1 text-sm">
               {runs.map((run) => (
                 <li key={run.id}>
-                  <button className="text-left hover:text-primary" onClick={() => setActiveRunId(run.id)}>
-                    {run.goal.slice(0, 72)} · {run.status}
-                    {run.last_grade ? ` · ${run.last_grade}` : ""}
+                  <button
+                    className="flex w-full items-center justify-between gap-2 text-left hover:text-primary"
+                    onClick={() => setActiveRunId(run.id)}
+                  >
+                    <span className="min-w-0 truncate">{run.goal.slice(0, 72)}</span>
+                    <span className="flex items-center gap-1">
+                      <Badge variant="outline">{run.status}</Badge>
+                      {run.last_grade ? <GradeBadge grade={run.last_grade} /> : null}
+                    </span>
                   </button>
                 </li>
               ))}
