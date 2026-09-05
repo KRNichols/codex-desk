@@ -342,12 +342,8 @@ export default function App() {
                 setSidebarOpen(false);
               }}
             >
-              <span className="truncate">Identity gate</span>
-              {status?.operator_attested ? (
-                <Badge variant="pass">attested</Badge>
-              ) : (
-                <GradeBadge grade="HOLD" />
-              )}
+              <span className="truncate">Identity / audit</span>
+              <Badge variant="pass">YOLO</Badge>
             </button>
             {agents.map((agent) => (
               <button
@@ -398,7 +394,7 @@ export default function App() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
               {view === "identity"
-                ? "IL5 identity gate"
+                ? "Identity / audit"
                 : view === "agent"
                   ? (activeAgent?.name ?? "Agent")
                   : (activeChat?.title ?? "Codex Desk")}
@@ -618,7 +614,7 @@ function RuntimeCard({
     ["share", status.shared_provider_auth ? "provider+auth" : "not detected"],
     ["pat", `${status.env_key_name ?? "AZURE_LLM_PAT"} ${status.env_key_present ? "set" : "missing"}`],
     ["store", status.store_encrypted ? `enc ${status.key_backend ?? "os"}` : "unsealed"],
-    ["ident", status.operator_attested ? "attested" : "HOLD writes"],
+    ["ident", "session-bound YOLO"],
     ["jobs", "OPERATOR.md + --config"],
   ];
   return (

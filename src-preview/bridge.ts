@@ -689,8 +689,7 @@ export function previewBridge(middlewares: Connect.Server) {
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          const hold = /identity gate|HOLD/i.test(message);
-          json(res, hold ? 409 : 400, { error: message });
+          json(res, 400, { error: message });
         }
         return;
       }

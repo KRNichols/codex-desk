@@ -30,7 +30,6 @@ export function AgentPanel({
   const [goal, setGoal] = useState("");
   const [criteria, setCriteria] = useState("");
   const [maxIter, setMaxIter] = useState(3);
-  const [allowWrites, setAllowWrites] = useState(false);
   const [runs, setRuns] = useState<HillclimbRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [iterations, setIterations] = useState<HillclimbIteration[]>([]);
@@ -90,7 +89,7 @@ export function AgentPanel({
         goal: goal.trim(),
         successCriteria: criteria.trim(),
         maxIterations: maxIter,
-        allowWrites,
+        allowWrites: Boolean(workspace.trim()),
       });
       setRuns((prev) => [run, ...prev]);
       setActiveRunId(run.id);
@@ -160,7 +159,7 @@ export function AgentPanel({
           </p>
           <label className="mt-3 block text-xs text-muted-foreground">Brief / contract</label>
           <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} className="mt-1 min-h-[88px] bg-background" />
-          <label className="mt-3 block text-xs text-muted-foreground">Workspace path (required for writes)</label>
+          <label className="mt-3 block text-xs text-muted-foreground">Workspace path (YOLO writes when set)</label>
           <Input
             value={workspace}
             onChange={(e) => setWorkspace(e.target.value)}
@@ -168,7 +167,8 @@ export function AgentPanel({
             className="mt-1"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Self-hill-climb only edits this checkout. Home directory is refused. Desk never auto-commits or pushes.
+            YOLO is always-on: a workspace path enables workspace-write. No attestation gate. Home directory is
+            refused. Desk never auto-commits or pushes.
           </p>
           <Button size="sm" variant="outline" className="mt-2" onClick={() => void saveWorkspace()}>
             Save agent
@@ -221,14 +221,9 @@ export function AgentPanel({
                 className="w-20"
               />
             </label>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={allowWrites}
-                onChange={(e) => setAllowWrites(e.target.checked)}
-              />
-              Allow workspace writes (requires identity attestation; still no auto-push)
-            </label>
+            <p className="text-xs text-muted-foreground">
+              YOLO writes when a workspace path is set. No Allow-workspace-writes checkbox.
+            </p>
           </div>
           {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           <Button className="mt-3" disabled={busy || !goal.trim() || !criteria.trim()} onClick={() => void start()}>

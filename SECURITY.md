@@ -31,7 +31,7 @@ boundary)** rather than “passed because we are local.”
 |---|---|
 | **User / mission AO** | Categorization (FIPS 199 / NSS / CUI), Azure tenant IL5 posture, endpoint + PAT handling, workstation hardening, CAC/PIV policy, mission ATO |
 | **Codex CLI + Azure deployment** | TLS to the model, provider auth, whatever FIPS modules that stack actually runs |
-| **Codex Desk** | Local UI, encrypted local store, Codex process spawn, hill-climb loop, hash-chained audit, secret non-storage, identity gate |
+| **Codex Desk** | Local UI, encrypted local store, Codex process spawn, hill-climb loop, hash-chained audit, secret non-storage, machine-bound identity |
 
 ## Data assumption
 
@@ -69,7 +69,7 @@ only.
 | Secrets / authenticators — Desk half (§9.4, IA-05) | PAT never in git or SQLite. Read from process env / Codex `env_key` / optional OS secret slot (`keystore.rs`, `src-preview/crypto.ts`). Setup refuses PAT-in-store, PAT-in-`config.toml`, and endpoint query tokens. Logs redact token-like lines | **PASS** (product) | AO still owns PAT issuance/rotation and CAC-backed authenticators (row below) |
 | Data at rest SC-28 — Desk envelope (§9.2) | Working AES-256-GCM envelope (`CDEX1`) over the SQLite/JSON store. DEK is random 256-bit; custody is Windows DPAPI + Credential Manager, else OS keyring, else machine-bound HKDF wrap (`vault.rs`, `keystore.rs`, `src-preview/secure-store.ts`). Legacy plaintext files are migrated and deleted. Key never in repo | **PASS** (product) | CMVP evidence is AO/inherited (FIPS row below). Desk AES is not a FIPS module |
 | Data in transit — Desk refusal | Desk does not open Azure sockets. Setup and `run_turn` **refuse** `http://` / `ws://` endpoints and credentialed URLs (`boundary.rs`, `codex.rs`) | **PASS** (product) | Codex + OS FIPS / CMVP certs stay AO |
-| Identity gate (not CAC/PIV) | Machine-bound unlock + operator attestation that **HOLDs workspace-write hill-climbs** until configured (`identity.rs`, Identity gate UI). Bind is OS user session. Not silent local-anyone for writes | **PASS** (product) | CAC/PIV Strength D remains AO |
+| Identity bind (not CAC/PIV) | Machine-bound unlock + optional operator record (`identity.rs`). **YOLO is always-on**: no in-app permission chrome, no identity-gate write HOLD, no Allow-workspace-writes checkbox. Bind is OS user session | **PASS** (product) | CAC/PIV Strength D remains AO |
 | Audit AU — Desk half | Append-only **hash-chained** events (SHA-256 of prev\|\|canonical fields) inside the encrypted store (`audit.rs`). Operator **export** (`export_audit` / `GET /api/audit/export`) — no auto-purge. No secret values | **PASS** (product) | SIEM/CSSP, contract retention, NTP remain AO |
 | Network boundary — Desk half | No phone-home. No analytics. Runner allowlist is **local Codex binary only**; remote/`http`/`\\` paths fail closed (`boundary.rs`) | **PASS** (product) | BCAP/SCCA if the workstation is DoD-connected — AO |
 | Supply chain — Desk half | Lockfiles committed. Lockfile-derived note in `docs/il5/SBOM.md` | **PASS** (product) | Signed provenance / vendor attestations — AO |
@@ -86,7 +86,7 @@ only.
 | Categorization (§3) | Docs assume potential CUI; no AO memo in-app | **MISSING** (AO) | Mission AO writes CIA / IL / NSS memo |
 | Four-layer stack (§4) | Desk is not a CSO; docs refuse High-only-as-IL5 | **MISSING** (AO/Azure) | Package Azure + workstation separately |
 | FIPS 140-3 (§9) | Desk verifies envelope algorithm and TLS URL shape. Desk does **not** have a CMVP certificate | **MISSING** (evidence) | Inherit Windows CNG / OpenSSL FIPS / Codex / Azure certs |
-| CAC/PIV (§10) | Identity gate is attestation, not Strength D | **MISSING** (AO) | Enterprise CAC/PIV / Windows Hello hardware |
+| CAC/PIV (§10) | Identity is a session bind, not Strength D. YOLO writes are not CAC-gated | **MISSING** (AO) | Enterprise CAC/PIV / Windows Hello hardware |
 | Retention / SIEM | Export exists; no CSSP feed | **MISSING** (AO) | 12+18 or contract retention + SIEM |
 | BCAP / SCCA | Local process only | **MISSING** (AO) | If DoD-connected |
 | Scan program (§14) | Not a scan platform. Deterministic HOLD on ATO claims | **MISSING** (AO) | Authenticated OS/web/SAST/secrets program |
@@ -109,10 +109,10 @@ Desk does **not** ship a validated cryptographic module.
 ## Residual risks (do not paper over)
 
 1. **Desk AES-256-GCM is not a CMVP module.** Encryption works; FIPS evidence is still MISSING.
-2. **No CAC/PIV.** Write hill-climbs require operator attestation; that is not Strength D.
+2. **No CAC/PIV.** Identity is a posix/windows user-session bind, not Strength D. YOLO writes do not wait on attestation.
 3. **Linux key custody** falls back to machine-bound wrap when Secret Service / Credential Manager is absent (PARTIAL vs Windows DPAPI).
 4. **No ConMon / scan program** for Desk as a CSO (it is not one).
-5. **Hill-climb with workspace-write** can edit the path the operator selected after attestation. Desk does not auto-commit or push.
+5. **Hill-climb YOLO workspace-write** can edit the path the operator set. Desk does not auto-commit or push. No in-app Allow-writes checkbox.
 
 ## Audit events
 
@@ -131,7 +131,8 @@ Plaintext `audit.jsonl` is no longer the system of record.
 
 Engineering choices try not to *create* IL5-disqualifying habits
 (secrets in git, fake ATO, High-only language, invented counts,
-phone-home, silent local-anyone writes, plaintext CUI store).
+phone-home, plaintext CUI store). YOLO writes are a product choice,
+not an in-app permission system.
 That is not an assessment. A 3PAO / DISA reviewer would bounce
 this as a CSO package — correctly — because Desk is a local tool,
 not an IL5 cloud service offering.

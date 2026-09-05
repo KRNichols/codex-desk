@@ -1,5 +1,6 @@
-//! Practical IL5 identity gate for a desk: machine-bound unlock plus
-//! an operator attestation that HOLDs workspace-write hill-climbs until set.
+//! Practical IL5 identity bind for a desk: machine-bound unlock plus an
+//! optional operator record. Desk does **not** own in-app write permissions.
+//! Workspace-write is YOLO whenever a workspace path is set.
 //!
 //! CAC/PIV is not shipped. Windows Hello hardware prompt is not invoked here;
 //! the bind is the OS user session (USERNAME / USERPROFILE). See SECURITY.md.
@@ -176,12 +177,18 @@ pub fn set_attestation(
     Ok(record)
 }
 
-pub fn require_write_attestation(conn: &Connection) -> Result<(), String> {
-    let att = load_attestation(conn)?;
-    if att.configured {
-        return Ok(());
-    }
-    Err("IL5 identity gate: workspace-write hill-climbs are HOLD until an operator attestation is recorded for this machine-bound session.".into())
+/// Always-on YOLO: attestation is not a write gate. Kept so leftover callers
+/// cannot HOLD hill-climb or workspace-write.
+pub fn require_write_attestation(_conn: &Connection) -> Result<(), String> {
+    Ok(())
+}
+
+/// Workspace-write is on whenever the operator set a non-empty workspace path.
+/// Home directory refusal stays in the Codex runner. Desk never auto-pushes.
+pub fn yolo_writes_enabled(workspace_path: Option<&str>) -> bool {
+    workspace_path
+        .map(|p| !p.trim().is_empty())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -192,5 +199,22 @@ mod tests {
     fn binding_is_stable_in_process() {
         assert_eq!(machine_binding(), machine_binding());
         assert_eq!(machine_binding().len(), 64);
+    }
+
+    #[test]
+    fn write_attestation_never_holds() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate_identity(&conn).unwrap();
+        assert!(require_write_attestation(&conn).is_ok());
+        let att = load_attestation(&conn).unwrap();
+        assert!(!att.configured);
+    }
+
+    #[test]
+    fn yolo_writes_follow_workspace() {
+        assert!(!yolo_writes_enabled(None));
+        assert!(!yolo_writes_enabled(Some("")));
+        assert!(!yolo_writes_enabled(Some("   ")));
+        assert!(yolo_writes_enabled(Some("/workspace")));
     }
 }

@@ -35,7 +35,7 @@ configured Azure endpoint.
 - Operator chat plus independent **agents** and **hill-climb** jobs (iterate → grade → fix until PASS/HOLD).
 - Each Codex turn is still local `codex exec --json` (resume per agent worker/grader thread).
 - Encrypted local store (AES-256-GCM, OS-backed / machine-bound DEK). PAT never stored there.
-- Hash-chained local audit events (no secret values). IL5 identity gate HOLDs workspace-write hill-climbs until attested.
+- Hash-chained local audit events (no secret values). YOLO writes are always-on when a workspace path is set — no in-app permission chrome.
 - Clear setup errors if `codex` is missing or Azure auth is incomplete.
 
 ## What this build does not do
@@ -149,7 +149,7 @@ Same placeholder keys as `.env.example`. Never commit it.
 3. Set **workspace** to this checkout (Windows example: `C:\src\codex-desk`). Home directory is refused.
 4. Goal example: `Clarify the README smoke path without claiming ATO.`
 5. Success criteria example: `A newcomer can run npm run dev and send hello; SECURITY.md residual risks stay marked MISSING.`
-6. Max iterations 3. Check **Allow workspace writes** only if you want Codex to edit that path. Review the diff yourself. Desk will not push.
+6. Max iterations 3. YOLO is always-on: a workspace path enables workspace-write with no attestation prompt and no Allow-workspace-writes checkbox. Review the diff yourself. Desk will not push.
 7. Watch iteration N, last grade (PASS/HOLD/WARN), and gaps. Cancel anytime.
 8. Optional: run **IL5 Architecture Grader** on the same checkout. `READY`/`PASS` means prep-ready for a human GRC look — never authorized.
 
@@ -179,9 +179,9 @@ Identity gate **HOLD writes** under **SETUP NEEDED** / Codex runtime **MISSING**
 
 ## Known limits
 
-- Operator chat uses `codex exec` read-only (`--sandbox read-only`). Hill-climb writes only if you set a workspace and enable writes (`--sandbox workspace-write`). Current Codex CLI (0.153+) does not accept `--ask-for-approval`.
+- Operator chat uses `codex exec` read-only (`--sandbox read-only`). Hill-climb is YOLO `workspace-write` when a workspace path is set. Current Codex CLI (0.153+) does not accept `--ask-for-approval`. Desk has no in-app permission gates.
 - Local store is encrypted at rest; Desk’s AES-256-GCM is **not** a FIPS 140-3 module. See `SECURITY.md`.
-- CAC/PIV is not shipped. Write hill-climbs require operator attestation.
+- CAC/PIV is not shipped. Identity is a session bind, not a write HOLD.
 - Follow-up turns resume the Codex thread when Codex emits a `thread_id`. If resume is unavailable, the next turn starts a new exec and Codex will not see prior CLI context (the Desk transcript still has it).
 - The Vite preview host is for development in a browser. The product is the desktop app.
 - Linux/macOS are nice-to-have; they may work if `codex` is on PATH, but they are not the v0 target.
