@@ -175,7 +175,7 @@ Desk Improver live **HOLD** / **ERROR** at iteration 0/3: `codex` CLI not found 
 
 ![Identity / runtime strip](docs/screenshots/04-identity-gate.png)
 
-Identity gate **HOLD writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), empty attestation form, Export audit. Posix-user-session bind — not an ATO.
+Identity gate **HOLD writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), attestation form (name/org unset), Export audit. Posix-user-session bind — not an ATO.
 
 ## Known limits
 
