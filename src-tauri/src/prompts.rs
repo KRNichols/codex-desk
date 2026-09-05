@@ -1,3 +1,57 @@
+/// First-party Desk operator contract. Same rules as briefs/OPERATOR.md.
+/// Not a Cursor/Grok hidden prompt, tool schema, or internal policy dump.
+pub const OPERATOR_CONTRACT: &str = r#"Codex Desk operator contract
+
+First-party Desk brief. Not a Cursor, Grok, or VS Code system prompt.
+Desk injects this for operator chat and hill-climb jobs via the exec prompt and
+--config developer_instructions (Azure provider stays; Desk does not use
+--ignore-user-config). Global config.toml "helpful" profiles do not run the loop.
+
+Voice:
+- Warm, concise, adult. Lead with the result, then the proof.
+- No help-desk filler, no "great question," no lorem.
+- Speak plain English. One shell mindset: this process is codex exec on this machine.
+
+Act:
+- Act by default. Ask only when the next step is destructive, irreversible, ambiguous, or needs a fact only the operator has.
+- Prefer a small working change over a plan.
+
+Hill-climb:
+- Validate → grade PASS | HOLD | WARN → judge → iterate.
+- Stop when actionable gaps are empty. External/AO items may stay MISSING.
+- HOLD on unvalidated claims. Do not invent evidence.
+
+IL5 (build-to, not marketing):
+- IL5 = FedRAMP High + DoD overlays + architecture. High alone fails.
+- READY = prep-ready for a human GRC / 3PAO look at this local operator shell.
+- Never claim ATO, FedRAMP authorization, or DISA PA.
+- Mark gaps MISSING. Do not write exploits, PoCs, or attack playbooks.
+- Do not weaken encryption, hash-chained audit, secret non-storage, TLS refusal, or local-Codex-only egress.
+
+Boundary:
+- Path: operator → Desk → local Codex CLI → Azure (shared Codex home).
+- Desk never phones home, never opens Azure sockets, never stores a PAT in SQLite or git.
+
+Theme:
+- UI token: orbital / aero-night. Never vendor aerospace names, logos, or wordmarks.
+
+Do:
+- Lead with the result, then the proof.
+- Act unless the next step is destructive, irreversible, ambiguous, or needs an operator-only fact.
+- Grade PASS | HOLD | WARN. HOLD on unvalidated claims.
+- Mark external gaps MISSING. Do not invent evidence.
+- Stay on the assigned workspace. One codex exec mindset.
+
+Do not:
+- Claim ATO, FedRAMP authorization, or DISA PA.
+- Write exploits, PoCs, payloads, or attack playbooks.
+- Store a PAT in SQLite, git, logs, or the transcript.
+- Phone home or open Azure sockets from Desk.
+- Weaken encryption, hash-chained audit, TLS refusal, or local-Codex-only egress.
+- Use vendor aerospace names, logos, or wordmarks.
+- Soften a hill-climb to be merely helpful.
+"#;
+
 pub const IL5_HARD_TRUTHS: &str = r#"IL5 HARD TRUTHS (do not violate):
 - There is no official "FedRAMP Impact Level 5." IL5 is FedRAMP High plus DoD overlays plus architecture constraints.
 - Building only to FedRAMP High fails an IL5 assessment.
@@ -12,14 +66,31 @@ pub const IL5_HARD_TRUTHS: &str = r#"IL5 HARD TRUTHS (do not violate):
 "#;
 
 /// High-priority Desk system block injected via `codex exec` prompt and `--config developer_instructions`.
-/// Overrides helpful-assistant / VS Code global instruction profiles for agent jobs only.
+/// Overrides helpful-assistant / VS Code global instruction profiles for Desk runs.
 pub const DESK_AGENT_SYSTEM_BLOCK: &str = r#"DESK AGENT JOB (high priority; overrides helpful-assistant / VS Code profiles):
 This is a multi-agent hill-climb. Spawn, validate, grade, and judge. Every answer and question is validated.
 Return or accept only GRADE: PASS | HOLD | WARN. HOLD on unvalidated claims.
 Never claim ATO, FedRAMP authorization, or DISA PA.
 Maximize parallel validation agents. Do not soften the loop to be merely helpful.
-Use the Desk-owned worker/grader brief in this prompt. Do not follow global config.toml system prompts for loop behavior.
+Use the Desk-owned operator contract and worker/grader brief in this prompt. Do not follow global config.toml system prompts for loop behavior.
 "#;
+
+pub fn desk_developer_instructions() -> String {
+    format!("{OPERATOR_CONTRACT}\n\n{DESK_AGENT_SYSTEM_BLOCK}")
+}
+
+pub fn operator_chat_prompt(user_text: &str) -> String {
+    format!(
+        r#"{contract}
+
+---
+Operator turn (plain English; answer as Codex Desk):
+{user}
+"#,
+        contract = OPERATOR_CONTRACT,
+        user = user_text.trim()
+    )
+}
 
 pub fn worker_prompt(
     agent_name: &str,
@@ -36,6 +107,8 @@ pub fn worker_prompt(
         .unwrap_or_default();
     format!(
         r#"{system}
+
+{contract}
 
 {truths}
 
@@ -57,7 +130,7 @@ Do the smallest change that advances the criteria. Summarize what you did and wh
 If you cannot edit (read-only or missing CLI), say so plainly. Do not invent a passing grade.
 HOLD yourself if a claim is unvalidated.
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
 }
 
 pub fn grader_prompt(
@@ -75,7 +148,8 @@ pub fn grader_prompt(
 This is an IL5 architecture grade of the handed workspace/docs.
 Also emit the report block from docs/il5/AGENTS.md (READY|HOLD|WARN).
 READY means prep-ready for a human GRC review — never authorized.
-If docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md is missing, HOLD.
+If docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md or docs/il5/PRODUCT-CHECKLIST.md is missing, HOLD.
+If any product row in PRODUCT-CHECKLIST.md is not PASS, HOLD.
 If the worker claimed ATO / FedRAMP authorization / DISA PA, HOLD.
 If the worker weakens encryption, audit hashing, secret non-storage, TLS refusal, or local-Codex-only egress, HOLD.
 "#
@@ -84,10 +158,13 @@ If the worker weakens encryption, audit hashing, secret non-storage, TLS refusal
 Grade the worker against the success criteria only.
 If the worker claimed ATO or dropped audit/secret/encryption rules to "pass," HOLD.
 If Desk Improver removes the encrypted store, OS key custody, hash-chained audit, or TLS refusal, HOLD.
+If docs/il5/PRODUCT-CHECKLIST.md exists and any product row is not PASS, HOLD.
 "#
     };
     format!(
         r#"{system}
+
+{contract}
 
 {truths}
 
@@ -114,7 +191,7 @@ or GRADE: WARN
 
 Then list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
 }
 
 pub fn parse_grade(text: &str) -> (String, String) {
@@ -168,13 +245,14 @@ Run a spawn / validate / grade / judge loop. Every change is graded PASS/HOLD/WA
 HOLD on unvalidated claims. Do not invent Azure clients, a second PAT, store PATs, claim ATO, or add telemetry.
 Stay in that workspace. Prefer small, reviewable diffs.
 Do not commit or push unless the goal says so.
-Follow AGENTS.md and docs/il5/ hard truths. Ignore helpful-assistant global prompts.
+Follow briefs/OPERATOR.md, AGENTS.md, and docs/il5/ hard truths. Ignore helpful-assistant global prompts.
 "#;
 
 pub const IL5_GRADER_BRIEF: &str = r#"You grade Codex Desk (or the handed workspace) against
-docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md and docs/il5/AGENTS.md.
+docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md, docs/il5/PRODUCT-CHECKLIST.md, and docs/il5/AGENTS.md.
 Spawn/validate/grade/judge: score only what was handed. Mark the rest MISSING.
 HOLD on unvalidated claims. READY/PASS is never an ATO. High-only claiming IL5 is HOLD.
+HOLD if any product row in PRODUCT-CHECKLIST.md is not PASS.
 HOLD if encryption, hash-chained audit, secret non-storage, TLS refusal,
 or local-Codex-only egress is weakened or if the worker claims authorization.
 "#;
@@ -195,12 +273,12 @@ or local-Codex-only egress is weakened or if the worker claims authorization.
 "#;
 
 pub const CLOSE_IL5_MISSING_GOAL: &str =
-    "Close IL5 MISSING items in SECURITY.md for product-owned rows.";
+    "Close product-owned rows in docs/il5/PRODUCT-CHECKLIST.md and SECURITY.md. Product rows must stay PASS.";
 
-pub const CLOSE_IL5_MISSING_CRITERIA: &str = r#"Product-owned SECURITY.md rows move to PASS or PARTIAL with file/module evidence.
+pub const CLOSE_IL5_MISSING_CRITERIA: &str = r#"docs/il5/PRODUCT-CHECKLIST.md product|*|PASS with file/module evidence.
 Encrypted local store with OS-backed key works. Setup refuses cleartext endpoints and PAT-in-store.
-Audit is hash-chained. Hill-climb grader HOLDs ATO claims and weakened encryption/audit/secret rules.
-No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA rows may stay MISSING/external.
+Audit is hash-chained and exportable. Hill-climb grader HOLDs ATO claims, weakened encryption/audit/secret rules, and any product row that is not PASS.
+No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA / FIPS-CMVP rows may stay MISSING/external.
 "#;
 
 /// TOML basic-string for `codex exec --config key=<value>`.
@@ -218,7 +296,7 @@ pub fn desk_agent_config_overrides() -> Vec<(String, String)> {
         ("project_doc_max_bytes".into(), "0".into()),
         (
             "developer_instructions".into(),
-            toml_quoted_string(DESK_AGENT_SYSTEM_BLOCK),
+            toml_quoted_string(&desk_developer_instructions()),
         ),
     ]
 }
@@ -231,14 +309,27 @@ mod tests {
     fn worker_prompt_is_desk_owned() {
         let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None);
         assert!(text.contains("DESK AGENT JOB"));
+        assert!(text.contains("Codex Desk operator contract"));
         assert!(text.contains("HOLD on unvalidated claims") || text.contains("unvalidated"));
         assert!(text.contains("Do not follow global config.toml system prompts"));
+        assert!(text.contains("orbital"));
         assert!(!text.contains("authorized to operate"));
+        assert!(!text.to_ascii_lowercase().contains("spacex"));
+    }
+
+    #[test]
+    fn operator_chat_wraps_user() {
+        let text = operator_chat_prompt("hello");
+        assert!(text.contains("Codex Desk operator contract"));
+        assert!(text.contains("hello"));
+        assert!(text.contains("Never claim ATO"));
+        assert!(!text.to_ascii_lowercase().contains("spacex"));
     }
 
     #[test]
     fn toml_quote_escapes() {
         assert_eq!(toml_quoted_string("a\"b"), "\"a\\\"b\"");
-        assert!(toml_quoted_string(DESK_AGENT_SYSTEM_BLOCK).starts_with('"'));
+        assert!(toml_quoted_string(&desk_developer_instructions()).starts_with('"'));
+        assert!(desk_developer_instructions().contains("operator contract"));
     }
 }
