@@ -116,7 +116,13 @@ export function AgentPanel({
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm">
               Iteration {activeRun.current_iteration}/{activeRun.max_iterations}
-              <Badge variant="outline">{activeRun.status}</Badge>
+              <Badge
+                variant={
+                  activeRun.status === "error" || activeRun.status === "blocked" ? "hold" : "outline"
+                }
+              >
+                {activeRun.status}
+              </Badge>
               {activeRun.last_grade ? <GradeBadge grade={activeRun.last_grade} /> : <GradeBadge grade="HOLD" />}
             </p>
             {running ? (
@@ -260,7 +266,13 @@ export function AgentPanel({
                   >
                     <span className="min-w-0 truncate">{run.goal.slice(0, 72)}</span>
                     <span className="flex items-center gap-1">
-                      <Badge variant="outline">{run.status}</Badge>
+                      <Badge
+                        variant={
+                          run.status === "error" || run.status === "blocked" ? "hold" : "outline"
+                        }
+                      >
+                        {run.status}
+                      </Badge>
                       {run.last_grade ? <GradeBadge grade={run.last_grade} /> : null}
                     </span>
                   </button>
