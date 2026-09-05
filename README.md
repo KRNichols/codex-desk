@@ -161,21 +161,21 @@ The UI uses the **orbital** (aero-night) console theme: charcoal/black, high-con
 
 Live captures of the local operator shell. Theme is orbital / aero-night only.
 
-![Main chat and setup HOLD](docs/screenshots/01-setup-chat.png)
+![Main chat and SETUP NEEDED](docs/screenshots/01-setup-chat.png)
 
-Main chat / setup HOLD. Codex CLI is **FOUND**; Azure `config.toml` / PAT is **MISSING** (honest 401 path). Runtime strip shows Desk injects `briefs/OPERATOR.md`.
+Main chat / **SETUP NEEDED**. Codex CLI is **MISSING** from PATH (not FOUND). Azure share is not detected; PAT slot unset. Identity gate **HOLD**. Desk Improver **IDLE**.
 
 ![Agents sidebar](docs/screenshots/02-agents-list.png)
 
-Agents list plus an operator `hello` that HOLDs on Azure auth. Identity gate and Desk Improver stay HOLD until attested / configured.
+Agents list plus operator `hello`. Banner is **SETUP NEEDED**: Codex not on PATH / runtime **MISSING**. Identity gate **HOLD**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
 
 ![Desk Improver hill-climb](docs/screenshots/03-desk-improver-hillclimb.png)
 
-Desk Improver live HOLD after a read-only hill-climb (Azure 401). Writes stay HOLD until the identity gate is attested. Export audit is on the compact identity card.
+Desk Improver live **HOLD** / **ERROR** at iteration 0/3: `codex` CLI not found on PATH; hill-climb cannot start. Writes stay **HOLD** until the identity gate is attested. Export audit is on the identity card. Not an ATO.
 
 ![Identity / runtime strip](docs/screenshots/04-identity-gate.png)
 
-Identity gate: encrypted store, intact audit chain, PAT slot unset (never SQLite), attestation form, Export audit. Not an ATO.
+Identity gate **HOLD writes** under **SETUP NEEDED** / Codex runtime **MISSING**. Encrypted store, intact audit chain, PAT slot unset (never SQLite), empty attestation form, Export audit. Posix-user-session bind — not an ATO.
 
 ## Known limits
 
