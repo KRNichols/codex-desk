@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 const ATO_CLAIMS = [
   "we are authorized",
   "has an ato",
@@ -37,6 +40,57 @@ export function claimsAuthorization(text: string): boolean {
 export function weakensProductControls(text: string): boolean {
   const lower = text.toLowerCase();
   return WEAKEN.some((p) => lower.includes(p));
+}
+
+export type Il5Row = {
+  owner: "product" | "ao";
+  id: string;
+  grade: string;
+  evidence: string;
+};
+
+export function parseIl5Rows(text: string): Il5Row[] {
+  const start = text.indexOf("```il5-rows");
+  if (start < 0) return [];
+  const bodyStart = text.indexOf("\n", start);
+  const end = text.indexOf("```", bodyStart + 1);
+  if (bodyStart < 0 || end < 0) return [];
+  const body = text.slice(bodyStart + 1, end);
+  const rows: Il5Row[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const parts = trimmed.split("|");
+    if (parts.length < 4) continue;
+    const owner = parts[0].trim();
+    if (owner !== "product" && owner !== "ao") continue;
+    rows.push({
+      owner,
+      id: parts[1].trim(),
+      grade: parts[2].trim().toUpperCase(),
+      evidence: parts.slice(3).join("|").trim(),
+    });
+  }
+  return rows;
+}
+
+export function productRowsNotPass(rows: Il5Row[]): Il5Row[] {
+  return rows.filter((r) => r.owner === "product" && r.grade !== "PASS");
+}
+
+export function enforceProductChecklist(
+  workspace: string,
+  parsed: { grade: string; gaps: string },
+): { grade: string; gaps: string } {
+  const file = path.join(workspace, "docs", "il5", "PRODUCT-CHECKLIST.md");
+  if (!existsSync(file)) {
+    return parsed;
+  }
+  const rows = parseIl5Rows(readFileSync(file, "utf8"));
+  const bad = productRowsNotPass(rows);
+  if (!bad.length) return parsed;
+  const extra = `HOLD: product checklist rows not PASS: ${bad.map((r) => `${r.id}=${r.grade}`).join(", ")}`;
+  return { grade: "HOLD", gaps: [extra, parsed.gaps].filter(Boolean).join("\n") };
 }
 
 export function enforceGrade(

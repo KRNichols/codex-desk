@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getIdentity, setOperatorAttestation } from "@/lib/runtime";
+import { exportAudit, getIdentity, setOperatorAttestation } from "@/lib/runtime";
 import type { IdentityStatus, RuntimeStatus } from "@/lib/types";
 
 export function IdentityPanel({
@@ -23,12 +23,34 @@ export function IdentityPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exportNote, setExportNote] = useState<string | null>(null);
 
   useEffect(() => {
     void getIdentity()
       .then(setIdentity)
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [status?.operator_attested, status?.store_encrypted]);
+
+  async function downloadAudit() {
+    setBusy(true);
+    setError(null);
+    setExportNote(null);
+    try {
+      const events = await exportAudit();
+      const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "codex-desk-audit.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportNote(`Exported ${events.length} hash-chained events. No PAT values.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -103,6 +125,15 @@ export function IdentityPanel({
           </Button>
         </div>
       )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void downloadAudit()}>
+          Export audit
+        </Button>
+        {exportNote ? <p className="text-xs text-foreground/80">{exportNote}</p> : null}
+        {error && identity?.operator_attestation.configured ? (
+          <p className="text-xs text-destructive">{error}</p>
+        ) : null}
+      </div>
     </section>
   );
 }

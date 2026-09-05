@@ -208,6 +208,10 @@ function backfillAudit(store: StoreFile): StoreFile {
   return store;
 }
 
+export function exportAudit(): unknown[] {
+  return ((loadStore().audit as unknown[] | undefined) ?? []).slice();
+}
+
 export function leftoverPlaintext(): boolean {
   return existsSync(LEGACY) || existsSync(LEGACY_AUDIT);
 }
