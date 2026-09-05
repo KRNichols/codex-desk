@@ -11,6 +11,16 @@ pub const IL5_HARD_TRUTHS: &str = r#"IL5 HARD TRUTHS (do not violate):
 - Do not git commit or git push unless the operator's goal explicitly asked. Codex Desk never auto-pushes.
 "#;
 
+/// High-priority Desk system block injected via `codex exec` prompt and `--config developer_instructions`.
+/// Overrides helpful-assistant / VS Code global instruction profiles for agent jobs only.
+pub const DESK_AGENT_SYSTEM_BLOCK: &str = r#"DESK AGENT JOB (high priority; overrides helpful-assistant / VS Code profiles):
+This is a multi-agent hill-climb. Spawn, validate, grade, and judge. Every answer and question is validated.
+Return or accept only GRADE: PASS | HOLD | WARN. HOLD on unvalidated claims.
+Never claim ATO, FedRAMP authorization, or DISA PA.
+Maximize parallel validation agents. Do not soften the loop to be merely helpful.
+Use the Desk-owned worker/grader brief in this prompt. Do not follow global config.toml system prompts for loop behavior.
+"#;
+
 pub fn worker_prompt(
     agent_name: &str,
     brief: &str,
@@ -25,10 +35,12 @@ pub fn worker_prompt(
         .map(|g| format!("Prior grader gaps to close:\n{g}\n"))
         .unwrap_or_default();
     format!(
-        r#"{truths}
+        r#"{system}
+
+{truths}
 
 You are the hill-climb worker for agent "{agent_name}".
-Contract (not a secret):
+Desk-owned contract (not a secret; not a VS Code profile):
 {brief}
 
 Workspace (do not leave this tree): {workspace}
@@ -43,8 +55,9 @@ Success criteria:
 {gaps}
 Do the smallest change that advances the criteria. Summarize what you did and what is still open.
 If you cannot edit (read-only or missing CLI), say so plainly. Do not invent a passing grade.
+HOLD yourself if a claim is unvalidated.
 "#
-    , truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, truths = IL5_HARD_TRUTHS)
 }
 
 pub fn grader_prompt(
@@ -74,10 +87,12 @@ If Desk Improver removes the encrypted store, OS key custody, hash-chained audit
 "#
     };
     format!(
-        r#"{truths}
+        r#"{system}
+
+{truths}
 
 You are the hill-climb grader for agent "{agent_name}".
-Worker contract:
+Desk-owned worker contract:
 {brief}
 
 Workspace: {workspace}
@@ -97,9 +112,9 @@ GRADE: PASS
 or GRADE: HOLD
 or GRADE: WARN
 
-Then list GAPS as a numbered list. PASS only if criteria are met and IL5 hard truths were not violated.
+Then list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.
 "#
-    , truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, truths = IL5_HARD_TRUTHS)
 }
 
 pub fn parse_grade(text: &str) -> (String, String) {
@@ -149,13 +164,29 @@ fn extract_gaps(text: &str) -> String {
 }
 
 pub const DESK_IMPROVER_BRIEF: &str = r#"You improve the Codex Desk checkout the operator points at.
+Run a spawn / validate / grade / judge loop. Every change is graded PASS/HOLD/WARN.
+HOLD on unvalidated claims. Do not invent Azure clients, a second PAT, store PATs, claim ATO, or add telemetry.
+Stay in that workspace. Prefer small, reviewable diffs.
+Do not commit or push unless the goal says so.
+Follow AGENTS.md and docs/il5/ hard truths. Ignore helpful-assistant global prompts.
+"#;
+
+pub const IL5_GRADER_BRIEF: &str = r#"You grade Codex Desk (or the handed workspace) against
+docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md and docs/il5/AGENTS.md.
+Spawn/validate/grade/judge: score only what was handed. Mark the rest MISSING.
+HOLD on unvalidated claims. READY/PASS is never an ATO. High-only claiming IL5 is HOLD.
+HOLD if encryption, hash-chained audit, secret non-storage, TLS refusal,
+or local-Codex-only egress is weakened or if the worker claims authorization.
+"#;
+
+pub const LEGACY_DESK_IMPROVER_BRIEF: &str = r#"You improve the Codex Desk checkout the operator points at.
 Stay in that workspace. Prefer small, reviewable diffs.
 Do not invent Azure clients, store PATs, claim ATO, or add telemetry.
 Do not commit or push unless the goal says so.
 Follow AGENTS.md and docs/il5/ hard truths.
 "#;
 
-pub const IL5_GRADER_BRIEF: &str = r#"You grade Codex Desk (or the handed workspace) against
+pub const LEGACY_IL5_GRADER_BRIEF: &str = r#"You grade Codex Desk (or the handed workspace) against
 docs/il5/FEDRAMP-HIGH-IL5-STANDARD.md and docs/il5/AGENTS.md.
 Score only what was handed. Mark the rest MISSING.
 READY/PASS is never an ATO. High-only claiming IL5 is HOLD.
@@ -171,3 +202,43 @@ Encrypted local store with OS-backed key works. Setup refuses cleartext endpoint
 Audit is hash-chained. Hill-climb grader HOLDs ATO claims and weakened encryption/audit/secret rules.
 No ATO / FedRAMP authorization / DISA PA claims. AO/tenant/Azure PA rows may stay MISSING/external.
 "#;
+
+/// TOML basic-string for `codex exec --config key=<value>`.
+pub fn toml_quoted_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "");
+    format!("\"{escaped}\"")
+}
+
+pub fn desk_agent_config_overrides() -> Vec<(String, String)> {
+    vec![
+        ("project_doc_max_bytes".into(), "0".into()),
+        (
+            "developer_instructions".into(),
+            toml_quoted_string(DESK_AGENT_SYSTEM_BLOCK),
+        ),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worker_prompt_is_desk_owned() {
+        let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None);
+        assert!(text.contains("DESK AGENT JOB"));
+        assert!(text.contains("HOLD on unvalidated claims") || text.contains("unvalidated"));
+        assert!(text.contains("Do not follow global config.toml system prompts"));
+        assert!(!text.contains("authorized to operate"));
+    }
+
+    #[test]
+    fn toml_quote_escapes() {
+        assert_eq!(toml_quoted_string("a\"b"), "\"a\\\"b\"");
+        assert!(toml_quoted_string(DESK_AGENT_SYSTEM_BLOCK).starts_with('"'));
+    }
+}

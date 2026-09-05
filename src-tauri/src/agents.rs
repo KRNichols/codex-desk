@@ -1,4 +1,6 @@
-use crate::prompts::{DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF};
+use crate::prompts::{
+    DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF, LEGACY_DESK_IMPROVER_BRIEF, LEGACY_IL5_GRADER_BRIEF,
+};
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -99,7 +101,9 @@ pub fn migrate_agents(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("migrate agents: {e}"))?;
-    seed_builtin(conn)
+    seed_builtin(conn)?;
+    refresh_template_brief(conn, "desk-improver", LEGACY_DESK_IMPROVER_BRIEF, DESK_IMPROVER_BRIEF)?;
+    refresh_template_brief(conn, "il5-grader", LEGACY_IL5_GRADER_BRIEF, IL5_GRADER_BRIEF)
 }
 
 fn seed_builtin(conn: &Connection) -> Result<(), String> {
@@ -115,6 +119,20 @@ fn seed_builtin(conn: &Connection) -> Result<(), String> {
     if !template_exists(conn, "il5-grader")? {
         create_agent(conn, "IL5 Architecture Grader", IL5_GRADER_BRIEF, "il5-grader", None)?;
     }
+    Ok(())
+}
+
+fn refresh_template_brief(
+    conn: &Connection,
+    template: &str,
+    legacy: &str,
+    next: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE agents SET brief = ?1, updated_at = ?2 WHERE template = ?3 AND brief = ?4",
+        params![next, Utc::now().to_rfc3339(), template, legacy],
+    )
+    .map_err(|e| format!("refresh {template} brief: {e}"))?;
     Ok(())
 }
 
