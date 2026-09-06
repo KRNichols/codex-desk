@@ -143,11 +143,14 @@ Windows app reads `%USERPROFILE%\.codex\`, not a WSL Linux home.
 
 ## Config / secrets
 
-`config.toml` holds **endpoint + `env_key` only**. The PAT lives in the
-environment or the Desk **Setup / Env** vault (exported **only** to the child
-`codex` process). The vault is optional and is not a second Azure client.
-Setup / Env lists `env_key` names plus Azure template vars; it never returns
-secret values. Full template: README [Connection](README.md#connection-codex-configtoml-only).
+`config.toml` holds **endpoint + `env_key` only** (default Codex shape:
+`model`, `model_provider`, `[model_providers.*]` with `base_url` + `env_key` +
+`wire_api`). The PAT lives in the environment named by `env_key`, or the Desk
+**Setup / Env** vault (exported **only** to the child `codex` process). Model
+slugs live in `config/models.json` (catalog only — no prompts, no secrets).
+The vault is optional and is not a second Azure client. Setup / Env lists
+`env_key` names plus Azure template vars; it never returns secret values.
+Full template: README [Connection](README.md#connection-codex-configtoml-only).
 
 Windows path: `%USERPROFILE%\.codex\config.toml`
 
@@ -158,7 +161,7 @@ model_provider = "azure"
 [model_providers.azure]
 name = "Azure OpenAI"
 base_url = "https://YOUR_RESOURCE.openai.azure.com/openai/v1"
-env_key = "AZURE_LLM_PAT"
+env_key = "AZURE_OPENAI_API_KEY"
 wire_api = "responses"
 ```
 

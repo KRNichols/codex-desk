@@ -90,9 +90,11 @@ configured Azure endpoint.
 ## Connection (Codex `config.toml` only)
 
 The only connection path is the operator’s existing Codex `config.toml`
-(endpoint + `env_key` for the PAT). Desk injects `briefs/OPERATOR.md`. It does
-not invent a second Azure client and does **not** require a second PAT store
-beyond what Codex already uses.
+(`base_url` for all chat traffic + `env_key` naming the PAT environment
+variable). Desk injects `briefs/OPERATOR.md`. It does not invent a second Azure
+client and does **not** require a second PAT store beyond what Codex already
+uses. Model slugs live in workspace `config/models.json` (catalog only — no
+system prompts, no secrets). Set `config.toml` `model=` to a catalog slug.
 
 You were given an Azure HTTP endpoint and a personal access token (PAT). Those stay on your machine.
 
@@ -128,11 +130,24 @@ model_provider = "azure"
 [model_providers.azure]
 name = "Azure OpenAI"
 base_url = "https://YOUR_RESOURCE.openai.azure.com/openai/v1"
-env_key = "AZURE_LLM_PAT"
+env_key = "AZURE_OPENAI_API_KEY"
 wire_api = "responses"
 ```
 
-Use the endpoint you were given. Do not append the PAT to the URL. If your contact did not give a deployment / model name, set `model` to whatever they use for that Azure resource — Codex Desk will not invent one.
+`model` is a slug from workspace `config/models.json` (rewrite that catalog —
+do not put system prompts there). `base_url` is the HTTPS endpoint for **all**
+chat traffic. `env_key` is only the **name** of the environment variable that
+holds the registered PAT — never paste the PAT into TOML, models JSON, git, or
+SQLite. Desk **Setup / Env** lists that name FOUND/MISSING and can vault-export
+it to the child `codex` process only.
+
+Use the endpoint you were given. Do not append the PAT to the URL. If your
+contact did not give a deployment / model name, set `model` to a catalog slug
+they use for that Azure resource — Codex Desk will not invent one.
+
+`AZURE_LLM_PAT` remains a Desk alias: when it is set and `AZURE_OPENAI_API_KEY`
+is not, Desk exports the PAT as `AZURE_OPENAI_API_KEY` **only** to the child
+`codex` process.
 
 ### Environment variables
 
@@ -159,7 +174,9 @@ Persistent User env (PowerShell):
 
 Then start a **new** terminal / restart Codex Desk so it sees the variables.
 
-If Codex examples expect `AZURE_OPENAI_API_KEY`, you can use that name instead. When `AZURE_LLM_PAT` is set and `AZURE_OPENAI_API_KEY` is not, Codex Desk exports the PAT as `AZURE_OPENAI_API_KEY` **only** to the child `codex` process.
+Preferred env name matches `config.toml` `env_key` (`AZURE_OPENAI_API_KEY`). The
+`AZURE_LLM_PAT` alias above still works — Desk exports it to the child `codex`
+process only.
 
 Optional app-data file (Windows): `%APPDATA%\com.codexdesk.app\.env.local`  
 Same placeholder keys as `.env.example`. Never commit it.

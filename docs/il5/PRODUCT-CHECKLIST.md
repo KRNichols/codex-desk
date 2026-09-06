@@ -31,7 +31,7 @@ product|no-phone-home|PASS|No analytics, crash phone-home, or Desk-owned Azure S
 product|lockfiles|PASS|package-lock.json + src-tauri/Cargo.lock committed
 product|sbom-note|PASS|docs/il5/SBOM.md lockfile-derived component list (not a signed provenance attestation)
 product|hillclimb-policy|PASS|policy.rs / src-preview/policy.ts HOLD on ATO claims, weakened controls, and send/merge/deploy without approval
-product|setup-env|PASS|setup.rs + SetupEnvPanel reads CODEX_HOME/USERPROFILE config.toml; lists env_key + Azure template FOUND/MISSING; env_vault.rs exports only to child codex
+product|setup-env|PASS|setup.rs + SetupEnvPanel reads CODEX_HOME/USERPROFILE config.toml (base_url + env_key); lists env_key + Azure template FOUND/MISSING; env_vault.rs exports only to child codex; config/models.json slugs only (no prompts)
 product|harness-six-jobs|PASS|harness.rs + src/lib/harness.ts score Contract/Context/Tools/State/Evidence/Recovery; HarnessBoard SixJobGrid; grader HARNESS-JOBS merge on Tauri and preview
 product|autonomy-ladder|PASS|autonomy.rs + AutonomyLadder UI; read automatic; workspace write YOLO+checks; send/merge/deploy evidence+approval; delete/pay/publish confirm. No identity-attestation write HOLD
 product|failure-upgrade|PASS|classify_gap → offer/auto promote; harness_map notes injected into later worker/grader prompts; FailureUpgradeLoop stepper (Run→Observe→Classify→Patch→Verify→Accept)

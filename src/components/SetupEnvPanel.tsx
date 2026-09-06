@@ -71,9 +71,11 @@ export function SetupEnvPanel({ onChange }: { onChange?: () => void }) {
         </div>
         <p className="text-sm text-foreground/85">
           Desk reads the shared Codex home (<code>CODEX_HOME</code>, else{" "}
-          <code>%USERPROFILE%\.codex</code> / <code>~/.codex</code>). Secrets stay out of{" "}
-          <code>config.toml</code>. Vault values export only to the child <code>codex</code> process.
-          Desk is not a second Azure client.
+          <code>%USERPROFILE%\.codex</code> / <code>~/.codex</code>). Default Codex shape:{" "}
+          <code>base_url</code> is the chat-traffic endpoint; <code>env_key</code> names the PAT
+          environment variable. Secrets stay out of <code>config.toml</code> and{" "}
+          <code>config/models.json</code>. Vault values export only to the child <code>codex</code>{" "}
+          process. Desk is not a second Azure client.
         </p>
         {status ? (
           <ul className="mt-3 space-y-1 font-mono text-xs text-foreground/85">
@@ -112,7 +114,9 @@ export function SetupEnvPanel({ onChange }: { onChange?: () => void }) {
       <section className="rounded-sm border border-border bg-card p-4">
         <h3 className="font-medium">Codex config fields</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Deployment / model and base_url come from config.toml. Desk will not invent a deployment name.
+          <code>model</code> is a catalog slug. <code>base_url</code> is the chat endpoint. The PAT is
+          only the env var named by <code>env_key</code>. Desk will not invent a deployment name,
+          endpoint, or PAT.
         </p>
         <ul className="mt-3 space-y-2">
           {(status?.config_fields ?? []).map((field) => (
@@ -130,6 +134,59 @@ export function SetupEnvPanel({ onChange }: { onChange?: () => void }) {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="rounded-sm border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="font-medium">Models catalog</h3>
+          <Badge variant={status?.models_catalog?.ok ? "pass" : "hold"}>
+            {status?.models_catalog?.ok
+              ? "slugs only"
+              : status?.models_catalog?.exists
+                ? "catalog blocked"
+                : "catalog missing"}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          <code>config/models.json</code> is a slug list the operator can rewrite. No system prompts
+          and no secrets in that file. Desk still injects <code>briefs/OPERATOR.md</code> on{" "}
+          <code>codex exec</code> via <code>--config developer_instructions</code>.
+        </p>
+        {status?.models_catalog ? (
+          <ul className="mt-3 space-y-1 font-mono text-xs text-foreground/85">
+            <li className="truncate" title={status.models_catalog.path}>
+              catalog: {status.models_catalog.path}
+            </li>
+            <li>
+              selected model: {status.model ?? "none"}
+              {status.model
+                ? status.catalog_slug_selected
+                  ? " · in catalog"
+                  : " · not in catalog (rewrite slugs or set config.toml model=)"
+                : ""}
+            </li>
+          </ul>
+        ) : null}
+        {status?.models_catalog?.error ? (
+          <p className="mt-2 text-xs text-hold">{status.models_catalog.error}</p>
+        ) : null}
+        <ul className="mt-3 space-y-2">
+          {(status?.models_catalog?.models ?? []).map((row) => (
+            <li key={row.slug} className="rounded-sm border border-border bg-background px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs">{row.slug}</span>
+                {status?.model === row.slug ? <Badge variant="pass">selected</Badge> : null}
+              </div>
+              {row.label ? <p className="mt-1 text-xs text-foreground/80">{row.label}</p> : null}
+              {row.provider ? (
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{row.provider}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {status?.models_catalog?.note ? (
+          <p className="mt-3 text-xs text-muted-foreground">{status.models_catalog.note}</p>
+        ) : null}
       </section>
 
       <section className="rounded-sm border border-border bg-card p-4">

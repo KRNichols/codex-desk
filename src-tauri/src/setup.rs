@@ -7,6 +7,7 @@
 use crate::codex::default_codex_home;
 use crate::env_vault;
 use crate::local_env::{env_lookup, load_merged_env, redact_url};
+use crate::models::{load_catalog, ModelsCatalog};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -45,6 +46,8 @@ pub struct SetupEnvStatus {
     pub env_keys_in_config: Vec<String>,
     pub vars: Vec<EnvVarRow>,
     pub config_fields: Vec<ConfigFieldRow>,
+    pub models_catalog: ModelsCatalog,
+    pub catalog_slug_selected: bool,
     pub note: String,
 }
 
@@ -80,10 +83,10 @@ pub fn describe_env_key(key: &str) -> &'static str {
 
 fn describe_config_field(key: &str) -> &'static str {
     match key {
-        "model" => "Azure deployment / model name in config.toml. Codex Desk will not invent one.",
+        "model" => "Selected slug from config/models.json, written as config.toml model=. Desk will not invent a deployment name.",
         "model_provider" => "Selected Codex provider (azure). Desk does not invent a second client.",
-        "base_url" => "HTTPS Azure resource endpoint in config.toml. No PAT in the URL.",
-        "env_key" => "Name of the environment variable that holds the PAT. The value stays out of config.toml.",
+        "base_url" => "HTTPS chat-traffic endpoint in config.toml. All Codex turns go here. No PAT in the URL.",
+        "env_key" => "Name of the environment variable that holds the registered PAT. The value stays out of config.toml.",
         _ => "Codex config.toml field.",
     }
 }
@@ -251,6 +254,11 @@ pub fn setup_env_status(app_data: Option<&Path>, cwd: &Path) -> SetupEnvStatus {
             .then(a.key.cmp(&b.key))
     });
 
+    let catalog = load_catalog(cwd);
+    let catalog_slug_selected = model
+        .as_deref()
+        .map(|slug| catalog.slugs.iter().any(|s| s == slug))
+        .unwrap_or(false);
     let redacted_url = base_url.as_deref().map(redact_url);
     let config_fields = vec![
         ConfigFieldRow {
@@ -310,7 +318,9 @@ pub fn setup_env_status(app_data: Option<&Path>, cwd: &Path) -> SetupEnvStatus {
         env_keys_in_config: env_keys.into_iter().collect(),
         vars,
         config_fields,
-        note: "Desk reads Codex config.toml only. Vault values export to the child codex process — Desk is not an Azure SDK.".into(),
+        models_catalog: catalog,
+        catalog_slug_selected,
+        note: "Desk reads Codex config.toml (base_url + env_key) and config/models.json slugs. Vault values export to the child codex process — Desk is not an Azure SDK.".into(),
     }
 }
 
@@ -355,7 +365,47 @@ env_key = "OPENAI_API_KEY"
         assert_eq!(status.model.as_deref(), Some("desk-deploy"));
         assert!(status.config_toml_exists);
         assert!(status.note.contains("not an Azure SDK"));
+        assert!(status.note.contains("models.json"));
         assert!(describe_env_key("AZURE_OPENAI_API_KEY").contains("PAT"));
+        assert!(!status.catalog_slug_selected);
+        assert!(!status.models_catalog.ok);
+    }
+
+    #[test]
+    fn setup_reads_catalog_slugs_without_prompts() {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("codex-home");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(
+            home.join("config.toml"),
+            r#"
+model = "desk-deploy"
+model_provider = "azure"
+
+[model_providers.azure]
+base_url = "https://example.openai.azure.com/openai/v1"
+env_key = "AZURE_OPENAI_API_KEY"
+wire_api = "responses"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("config")).unwrap();
+        std::fs::write(
+            dir.path().join("config/models.json"),
+            r#"{ "models": [{ "slug": "desk-deploy", "provider": "azure" }] }"#,
+        )
+        .unwrap();
+        let prev = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &home);
+        let status = setup_env_status(Some(dir.path()), dir.path());
+        match prev {
+            Some(v) => std::env::set_var("CODEX_HOME", v),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        assert_eq!(status.models_catalog.slugs, vec!["desk-deploy".to_string()]);
+        assert!(status.catalog_slug_selected);
+        assert!(status.models_catalog.ok);
+        assert!(status.models_catalog.note.contains("Slug catalog only"));
     }
 
     #[test]
