@@ -25,7 +25,15 @@ import type {
   OperatorAttestation,
 } from "../src/lib/types";
 import { classifyGoal, gate } from "../src/lib/autonomy";
-import { classifyGap, newHarnessRecord, offerPromotion, scoreJobs } from "../src/lib/harness";
+import {
+  classifyGap,
+  formatHarnessMapNotes,
+  liveRecoveryPhase,
+  newHarnessRecord,
+  offerPromotion,
+  recoveryPhaseFor,
+  scoreJobs,
+} from "../src/lib/harness";
 import { DATA_DIR, loadStore, patchStore, writeAudit } from "./secure-store";
 import { childEnv } from "./setup";
 import { assertLocalCodex, enforceGrade, enforceProductChecklist } from "./policy";
@@ -474,6 +482,7 @@ async function loop(runId: string) {
   mkdirSync(workdir, { recursive: true });
   const writes = yoloWritesEnabled(agent.workspace_path);
   let gaps: string | undefined;
+  let sawFail = false;
   for (let i = 1; i <= run.max_iterations; i += 1) {
     if (cancels.has(runId)) break;
     run = getRun(runId).run;
@@ -482,6 +491,12 @@ async function loop(runId: string) {
     run.updated_at = nowIso();
     upsertRun(run);
     audit("hillclimb.iteration", "run", runId, `iteration=${i} phase=worker`);
+    const mapNotes = formatHarnessMapNotes(loadHarnessMap().notes);
+    if (!run.harness) {
+      run.harness = newHarnessRecord(run.goal, run.success_criteria, agent.workspace_path, writes);
+    }
+    run.harness.recovery_phase = liveRecoveryPhase(sawFail, "worker");
+    upsertRun(run);
     const wprompt = workerPrompt({
       agentName: agent.name,
       brief: agent.brief,
@@ -491,6 +506,7 @@ async function loop(runId: string) {
       iteration: i,
       maxIterations: run.max_iterations,
       priorGaps: gaps,
+      harnessMapNotes: mapNotes || undefined,
     });
     try {
       const worker = await runCodex(binary, wprompt, workdir, writes ? "workspace-write" : "read-only", agent.worker_thread_id);
@@ -505,6 +521,8 @@ async function loop(runId: string) {
         gaps: null,
         created_at: nowIso(),
       });
+      run.harness.recovery_phase = liveRecoveryPhase(sawFail, "grader");
+      upsertRun(run);
       const gprompt = graderPrompt({
         agentName: agent.name,
         brief: agent.brief,
@@ -514,6 +532,7 @@ async function loop(runId: string) {
         iteration: i,
         workerSummary: worker.text,
         il5Mode: agent.template === "il5-grader",
+        harnessMapNotes: mapNotes || undefined,
       });
       const grader = await runCodex(binary, gprompt, workdir, "read-only", agent.grader_thread_id);
       if (grader.threadId) updateAgentStatus(agent.id, "running", { grader: grader.threadId });
@@ -531,10 +550,19 @@ async function loop(runId: string) {
           confirmed,
         ),
       );
+      if (parsed.grade === "HOLD" || parsed.grade === "WARN") sawFail = true;
       const classified =
-        parsed.grade === "HOLD" || parsed.grade === "WARN" ? classifyGap(parsed.gaps) : undefined;
+        parsed.grade === "HOLD" || parsed.grade === "WARN"
+          ? classifyGap(parsed.gaps)
+          : run.harness.classified_gap
+            ? {
+                category: run.harness.gap_category ?? "map",
+                gap: run.harness.classified_gap,
+                promote: "Keep the verified fix on the harness map.",
+              }
+            : undefined;
       if (classified) {
-        gaps = `${parsed.gaps}\n\nCLASSIFIED GAP: [${classified.category}] ${classified.gap}\nPROMOTE CANDIDATE: ${classified.promote}`;
+        gaps = `${parsed.gaps}\n\nCLASSIFIED GAP: [${classified.category}] ${classified.gap}\nPROMOTE CANDIDATE: ${classified.promote}\nRECOVERY: classify → patch this iteration (do not retry blindly)`;
       } else {
         gaps = parsed.gaps;
       }
@@ -543,14 +571,11 @@ async function loop(runId: string) {
       }
       run.harness.classified_gap = classified?.gap ?? run.harness.classified_gap;
       run.harness.gap_category = classified?.category ?? run.harness.gap_category;
-      run.harness.recovery_phase =
-        parsed.grade === "HOLD" || parsed.grade === "WARN"
-          ? classified
-            ? "classify"
-            : "observe"
-          : classified
-            ? "verify"
-            : "observe";
+      run.harness.recovery_phase = recoveryPhaseFor(
+        parsed.grade,
+        Boolean(classified),
+        parsed.grade === "PASS" && sawFail,
+      );
       run.harness.jobs = scoreJobs({
         goal: run.goal,
         criteria: run.success_criteria,

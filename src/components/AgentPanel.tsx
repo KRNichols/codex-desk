@@ -22,6 +22,7 @@ import type { HarnessMap } from "@/lib/types";
 import { CLOSE_IL5_MISSING_CRITERIA, CLOSE_IL5_MISSING_GOAL } from "@/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, RuntimeStatus } from "@/lib/types";
 import { IdentityPanel } from "@/components/IdentityPanel";
+import { AutonomyLadder, FailureUpgradeLoop, SixJobGrid } from "@/components/HarnessBoard";
 
 export function AgentPanel({
   agent,
@@ -119,7 +120,7 @@ export function AgentPanel({
 
   return (
     <ScrollArea className="flex-1">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6">
         {activeRun ? (
           <section className="rounded-sm border border-hold/40 bg-hold/10 p-4">
             <div className="flex items-center justify-between gap-2">
@@ -194,84 +195,22 @@ export function AgentPanel({
           </section>
         ) : null}
 
-        <section className="rounded-sm border border-border bg-card p-4">
-          <h3 className="font-medium">Six-job harness</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            A prompt steers one inference. This record governs the run. Grader scores all six.
-          </p>
-          <p className="mt-2 font-mono text-[11px] text-foreground/80">{harness.autonomy_label}</p>
-          <p className="font-mono text-[11px] text-muted-foreground">
-            Recovery: {harness.recovery_phase} · sandbox {harness.sandbox} · {harness.allowlist}
-          </p>
-          <ol className="mt-3 space-y-2">
-            {(harness.jobs.length ? harness.jobs : emptyHarness().jobs).map((job) => (
-              <li key={job.name} className="rounded-sm border border-border bg-background px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium">{job.label}</span>
-                  <GradeBadge grade={job.status} />
-                </div>
-                <p className="mt-1 text-xs text-foreground/80">{job.summary}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        {harness.classified_gap || harness.promotions.length ? (
-          <section className="rounded-sm border border-border bg-card p-4">
-            <h3 className="font-medium">Failure upgrade</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Run → Observe → Classify → Patch → Verify → Accept. Promote the fix into the harness, not only this run.
-            </p>
-            {harness.classified_gap ? (
-              <p className="mt-2 font-mono text-xs">
-                Classify [{harness.gap_category ?? "map"}]: {harness.classified_gap}
-              </p>
-            ) : null}
-            <ul className="mt-3 space-y-2">
-              {harness.promotions.map((promo) => (
-                <li key={promo.id} className="rounded-sm border border-border bg-background px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono">
-                      {promo.category} · {promo.status}
-                    </span>
-                    {promo.status === "offered" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          void promoteHarness(activeRun!.id, promo.id).then((next) => {
-                            setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
-                            void getHarnessMap().then(setHarnessMap);
-                          })
-                        }
-                      >
-                        Promote into harness
-                      </Button>
-                    ) : (
-                      <GradeBadge grade="PASS" />
-                    )}
-                  </div>
-                  <p className="mt-1">{promo.gap}</p>
-                  <p className="mt-1 text-muted-foreground">{promo.patch}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {harnessMap?.notes?.length ? (
-          <section className="rounded-sm border border-border bg-card p-4">
-            <h3 className="font-medium">Harness map (promoted)</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Engine-style promote path. These notes improve every later Desk Improver run.
-            </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-              {harnessMap.notes.slice(0, 8).map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <SixJobGrid harness={harness} envKeyPresent={status?.env_key_present} />
+        <AutonomyLadder
+          current={activeRun?.harness?.autonomy_tier ?? previewTier}
+          approvalStatus={harness.approval_status}
+        />
+        <FailureUpgradeLoop
+          harness={harness}
+          map={harnessMap}
+          runId={activeRun?.id}
+          onPromote={(runId, promoId) =>
+            void promoteHarness(runId, promoId).then((next) => {
+              setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+              void getHarnessMap().then(setHarnessMap);
+            })
+          }
+        />
 
         <IdentityPanel status={status} compact />
 

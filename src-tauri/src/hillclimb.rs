@@ -326,6 +326,18 @@ fn execute_loop(
             audit::write(db, &app_data, "hillclimb.iteration", "run", &run_id, &format!("iteration={i} phase=worker"));
         });
 
+        let map_notes = with_db(&app, |db| {
+            harness::load_map(db)
+                .ok()
+                .and_then(|m| harness::format_map_notes(&m.notes))
+        })
+        .flatten();
+        with_db(&app, |db| {
+            if let Ok(Some(mut live)) = agents::get_run(db, &run_id) {
+                live.harness.recovery_phase = harness::live_recovery_phase(saw_fail, "worker").into();
+                let _ = agents::save_harness(db, &run_id, &live.harness);
+            }
+        });
         let prompt = worker_prompt(
             &agent.name,
             &agent.brief,
@@ -335,6 +347,7 @@ fn execute_loop(
             i as u32,
             max as u32,
             prior_gaps.as_deref(),
+            map_notes.as_deref(),
         );
         let worker = run_turn(
             &binary,
@@ -399,6 +412,12 @@ fn execute_loop(
             },
         );
 
+        with_db(&app, |db| {
+            if let Ok(Some(mut live)) = agents::get_run(db, &run_id) {
+                live.harness.recovery_phase = harness::live_recovery_phase(saw_fail, "grader").into();
+                let _ = agents::save_harness(db, &run_id, &live.harness);
+            }
+        });
         let gprompt = grader_prompt(
             &agent.name,
             &agent.brief,
@@ -408,6 +427,7 @@ fn execute_loop(
             i as u32,
             &worker_text,
             il5_mode,
+            map_notes.as_deref(),
         );
         let grader = run_turn(
             &binary,

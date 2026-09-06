@@ -3,6 +3,31 @@ import type { HarnessJob, HarnessPromotion, HarnessRecord } from "./types";
 
 export const JOB_NAMES = ["contract", "context", "tools", "state", "evidence", "recovery"] as const;
 
+export const JOB_CARDS = [
+  { name: "contract", num: "01", title: "Contract", purpose: "Define the goal, constraints and done" },
+  { name: "context", num: "02", title: "Context", purpose: "Select rules, facts and current state" },
+  { name: "tools", num: "03", title: "Tools", purpose: "Act through schemas, permissions and sandboxes" },
+  { name: "state", num: "04", title: "State", purpose: "Persist decisions, artifacts and open risks" },
+  { name: "evidence", num: "05", title: "Evidence", purpose: "Verify with tests, sources and screenshots" },
+  { name: "recovery", num: "06", title: "Recovery", purpose: "Retry locally, escalate and improve the system" },
+] as const;
+
+export const RECOVERY_STEPS = [
+  { id: "run", label: "Run", blurb: "produce work" },
+  { id: "observe", label: "Observe", blurb: "capture evidence" },
+  { id: "classify", label: "Classify", blurb: "name the gap" },
+  { id: "patch", label: "Patch", blurb: "repair locally" },
+  { id: "verify", label: "Verify", blurb: "test exact case" },
+  { id: "accept", label: "Accept", blurb: "ship with trace" },
+] as const;
+
+export const PROMOTE_KINDS = [
+  { id: "map", label: "Update a map" },
+  { id: "tool", label: "Improve a tool" },
+  { id: "policy", label: "Tighten a policy" },
+  { id: "test", label: "Add a test" },
+] as const;
+
 export function jobLabel(name: string): string {
   switch (name) {
     case "contract":
@@ -10,13 +35,13 @@ export function jobLabel(name: string): string {
     case "context":
       return "2 Context — rules, facts, current state";
     case "tools":
-      return "3 Tools — schemas, sandboxes, allowlists";
+      return "3 Tools — schemas, permissions, sandboxes";
     case "state":
       return "4 State — persist decisions, artifacts, open risks";
     case "evidence":
       return "5 Evidence — tests, sources, screenshots";
     case "recovery":
-      return "6 Recovery — retry locally, escalate, improve system";
+      return "6 Recovery — retry locally, escalate, improve the system";
     default:
       return name;
   }
@@ -112,8 +137,83 @@ function scoreOne(name: string, input: ScoreInput): HarnessJob {
   return { name, label: jobLabel(name), status, summary };
 }
 
+function rankStatus(status: string): number {
+  if (status === "HOLD") return 2;
+  if (status === "WARN") return 1;
+  return 0;
+}
+
+function normalizeStatus(token: string): string {
+  const t = token.trim().toUpperCase();
+  if (t === "PASS" || t === "READY") return "PASS";
+  if (t === "WARN") return "WARN";
+  if (t === "HOLD") return "HOLD";
+  return "WARN";
+}
+
+/** Parse the grader/worker `HARNESS-JOBS:` block. */
+export function parseJobBlock(text: string): HarnessJob[] | null {
+  const upper = text.toUpperCase();
+  const start = upper.indexOf("HARNESS-JOBS:");
+  if (start < 0) return null;
+  const rest = text.slice(start + "HARNESS-JOBS:".length);
+  const jobs: HarnessJob[] = [];
+  for (const line of rest.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed && jobs.length) break;
+    const split = trimmed.indexOf(":");
+    if (split < 0) continue;
+    const name = trimmed.slice(0, split).trim().toLowerCase();
+    if (!JOB_NAMES.includes(name as (typeof JOB_NAMES)[number])) continue;
+    const body = trimmed.slice(split + 1).trim();
+    let status = "WARN";
+    let summary = "";
+    const em = body.indexOf("—");
+    const dash = body.indexOf(" - ");
+    if (em >= 0) {
+      status = normalizeStatus(body.slice(0, em));
+      summary = body.slice(em + 1).trim();
+    } else if (dash >= 0) {
+      status = normalizeStatus(body.slice(0, dash));
+      summary = body.slice(dash + 3).trim();
+    } else {
+      const [tok, ...more] = body.split(/\s+/);
+      status = normalizeStatus(tok ?? "WARN");
+      summary = more.join(" ").trim();
+    }
+    jobs.push({ name, label: jobLabel(name), status, summary });
+  }
+  return jobs.length ? jobs : null;
+}
+
 export function scoreJobs(input: ScoreInput): HarnessJob[] {
-  return JOB_NAMES.map((name) => scoreOne(name, input));
+  const parsed = parseJobBlock(input.worker) ?? parseJobBlock(input.grader);
+  return JOB_NAMES.map((name) => {
+    const deterministic = scoreOne(name, input);
+    const fromModel = parsed?.find((j) => j.name === name);
+    if (!fromModel) return deterministic;
+    if (rankStatus(deterministic.status) > rankStatus(fromModel.status)) return deterministic;
+    return { ...deterministic, status: fromModel.status, summary: fromModel.summary || deterministic.summary };
+  });
+}
+
+export function recoveryPhaseFor(grade: string, classified: boolean, passedAfterFail: boolean): string {
+  if (passedAfterFail) return "accept";
+  if (grade === "HOLD" || grade === "WARN") return classified ? "classify" : "observe";
+  if (classified) return "verify";
+  return "observe";
+}
+
+export function liveRecoveryPhase(sawFail: boolean, at: "worker" | "grader"): string {
+  if (at === "worker") return sawFail ? "patch" : "run";
+  return sawFail ? "verify" : "observe";
+}
+
+export function formatHarnessMapNotes(notes: string[]): string {
+  return notes
+    .filter((n) => n.trim())
+    .map((n) => `- ${n}`)
+    .join("\n");
 }
 
 export function newHarnessRecord(

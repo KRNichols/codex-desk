@@ -91,7 +91,16 @@ export function setupEnvStatus(): SetupEnvStatus {
       source,
       required: configKeys.includes(key) || key === "AZURE_OPENAI_API_KEY" || key === "AZURE_LLM_PAT",
       from_config: configKeys.includes(key),
-      related_to: key === "AZURE_LLM_ENDPOINT" || key === "AZURE_OPENAI_ENDPOINT" ? "base_url" : null,
+      related_to:
+        key === "AZURE_LLM_ENDPOINT" || key === "AZURE_OPENAI_ENDPOINT"
+          ? "base_url"
+          : key === "AZURE_OPENAI_DEPLOYMENT"
+            ? "model"
+            : key === "AZURE_OPENAI_API_KEY" && configKeys.includes("AZURE_LLM_PAT")
+              ? "AZURE_LLM_PAT"
+              : key === "AZURE_LLM_PAT" && configKeys.includes("AZURE_OPENAI_API_KEY")
+                ? "AZURE_OPENAI_API_KEY"
+                : null,
       display_value: null,
       settable: true,
     };

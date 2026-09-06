@@ -222,8 +222,12 @@ export function workerPrompt(args: {
   iteration: number;
   maxIterations: number;
   priorGaps?: string;
+  harnessMapNotes?: string;
 }) {
   const gaps = args.priorGaps ? `Prior grader gaps to close:\n${args.priorGaps}\n` : "";
+  const map = args.harnessMapNotes?.trim()
+    ? `Promoted harness map (improves every later run; do not invent that a secret is set):\n${args.harnessMapNotes}\n`
+    : "";
   return `${DESK_AGENT_SYSTEM_BLOCK}
 
 ${OPERATOR_CONTRACT}
@@ -243,7 +247,7 @@ ${args.goal}
 Success criteria:
 ${args.successCriteria}
 
-${gaps}
+${gaps}${map}
 Do the smallest change that advances the criteria. Summarize what you did and what is still open.
 Harness jobs: Contract, Context, Tools, State, Evidence, Recovery.
 Autonomy: read automatic; workspace write automatic+checks; send/merge/deploy needs evidence+approval; delete/pay/publish needs explicit human confirm.
@@ -272,6 +276,7 @@ export function graderPrompt(args: {
   iteration: number;
   workerSummary: string;
   il5Mode: boolean;
+  harnessMapNotes?: string;
 }) {
   const extra = args.il5Mode
     ? `
@@ -312,7 +317,7 @@ ${args.goal}
 Success criteria:
 ${args.successCriteria}
 
-Worker summary:
+${args.harnessMapNotes?.trim() ? `Promoted harness map (improves every later run; do not invent that a secret is set):\n${args.harnessMapNotes}\n\n` : ""}Worker summary:
 ${args.workerSummary}
 ${extra}
 End with a machine-readable line exactly like:

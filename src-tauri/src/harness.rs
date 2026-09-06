@@ -71,10 +71,10 @@ fn job_label(name: &str) -> &'static str {
     match name {
         "contract" => "1 Contract — goal, constraints, done",
         "context" => "2 Context — rules, facts, current state",
-        "tools" => "3 Tools — schemas, sandboxes, allowlists",
+        "tools" => "3 Tools — schemas, permissions, sandboxes",
         "state" => "4 State — persist decisions, artifacts, open risks",
         "evidence" => "5 Evidence — tests, sources, screenshots",
-        "recovery" => "6 Recovery — retry locally, escalate, improve system",
+        "recovery" => "6 Recovery — retry locally, escalate, improve the system",
         _ => "job",
     }
 }
@@ -569,6 +569,40 @@ pub fn recovery_phase_for(grade: &str, classified: bool, passed_after_fail: bool
     }
 }
 
+pub fn live_recovery_phase(saw_fail: bool, at: &str) -> &'static str {
+    match at {
+        "worker" => {
+            if saw_fail {
+                "patch"
+            } else {
+                "run"
+            }
+        }
+        _ => {
+            if saw_fail {
+                "verify"
+            } else {
+                "observe"
+            }
+        }
+    }
+}
+
+pub fn format_map_notes(notes: &[String]) -> Option<String> {
+    if notes.is_empty() {
+        None
+    } else {
+        Some(
+            notes
+                .iter()
+                .filter(|n| !n.trim().is_empty())
+                .map(|n| format!("- {n}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -654,5 +688,18 @@ tools: WARN sandbox unknown
         let rec = new_record("git push and deploy to staging", "merged", None, true);
         assert_eq!(rec.autonomy_tier, "send_merge_deploy");
         assert_eq!(rec.approval_status, "required");
+    }
+
+    #[test]
+    fn live_phases_and_map_notes() {
+        assert_eq!(live_recovery_phase(false, "worker"), "run");
+        assert_eq!(live_recovery_phase(true, "worker"), "patch");
+        assert_eq!(live_recovery_phase(false, "grader"), "observe");
+        assert_eq!(live_recovery_phase(true, "grader"), "verify");
+        assert_eq!(recovery_phase_for("PASS", true, true), "accept");
+        assert_eq!(recovery_phase_for("HOLD", true, false), "classify");
+        let notes = format_map_notes(&[String::from("[test] lock the gap")]).unwrap();
+        assert!(notes.contains("- [test] lock the gap"));
+        assert!(format_map_notes(&[]).is_none());
     }
 }

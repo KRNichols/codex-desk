@@ -148,9 +148,18 @@ pub fn worker_prompt(
     iteration: u32,
     max_iterations: u32,
     prior_gaps: Option<&str>,
+    harness_map: Option<&str>,
 ) -> String {
     let gaps = prior_gaps
         .map(|g| format!("Prior grader gaps to close:\n{g}\n"))
+        .unwrap_or_default();
+    let map = harness_map
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            format!(
+                "Promoted harness map (improves every later run; do not invent that a secret is set):\n{s}\n"
+            )
+        })
         .unwrap_or_default();
     format!(
         r#"{system}
@@ -172,7 +181,7 @@ Goal:
 Success criteria:
 {success_criteria}
 
-{gaps}
+{gaps}{map}
 Do the smallest change that advances the criteria. Summarize what you did and what is still open.
 Harness jobs: Contract, Context, Tools, State, Evidence, Recovery.
 Autonomy: read automatic; workspace write automatic+checks; send/merge/deploy needs evidence+approval; delete/pay/publish needs explicit human confirm.
@@ -190,7 +199,7 @@ recovery: …
 CLASSIFY: category | exact gap
 PROMOTE: map|tool|policy|test|brief|loop | what to change
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS, gaps = gaps, map = map)
 }
 
 pub fn grader_prompt(
@@ -202,6 +211,7 @@ pub fn grader_prompt(
     iteration: u32,
     worker_summary: &str,
     il5_mode: bool,
+    harness_map: Option<&str>,
 ) -> String {
     let extra = if il5_mode {
         r#"
@@ -225,6 +235,14 @@ HOLD if send/merge/deploy happened without evidence+approval, or delete/pay/publ
 HOLD if a failure was patched for this run only and the exact gap was not returned for Classify / harness upgrade when the worker could promote a map, tool, policy, or test.
 "#
     };
+    let map = harness_map
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            format!(
+                "Promoted harness map (improves every later run; do not invent that a secret is set):\n{s}\n\n"
+            )
+        })
+        .unwrap_or_default();
     format!(
         r#"{system}
 
@@ -245,7 +263,7 @@ Goal:
 Success criteria:
 {success_criteria}
 
-Worker summary:
+{map}Worker summary:
 {worker_summary}
 {extra}
 End with a machine-readable line exactly like:
@@ -264,7 +282,7 @@ evidence: …
 recovery: …
 Score all six. HOLD recovery if the worker retried blindly without Classify.
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS, map = map)
 }
 
 pub fn parse_grade(text: &str) -> (String, String) {
@@ -405,7 +423,7 @@ mod tests {
 
     #[test]
     fn worker_prompt_is_desk_owned() {
-        let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None);
+        let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None, None);
         assert!(text.contains("DESK AGENT JOB"));
         assert!(text.contains("Codex Desk operator contract"));
         assert!(text.contains("HOLD on unvalidated claims") || text.contains("unvalidated"));
@@ -417,6 +435,19 @@ mod tests {
         assert!(text.contains("HARNESS-JOBS:"));
         assert!(text.contains("send/merge/deploy needs evidence+approval"));
         assert!(text.contains("return the exact gap to Classify"));
+        let mapped = worker_prompt(
+            "Improver",
+            "brief",
+            "goal",
+            "criteria",
+            "/ws",
+            1,
+            3,
+            None,
+            Some("- [policy] HOLD ATO claims"),
+        );
+        assert!(mapped.contains("Promoted harness map"));
+        assert!(mapped.contains("[policy] HOLD ATO claims"));
         assert!(!text.contains("authorized to operate"));
         assert!(!text.to_ascii_lowercase().contains("spacex"));
     }
@@ -432,6 +463,7 @@ mod tests {
             1,
             "did a thing",
             false,
+            None,
         );
         assert!(text.contains("send/merge/deploy happened without evidence+approval"));
         assert!(text.contains("exact gap was not returned for Classify"));
@@ -439,6 +471,20 @@ mod tests {
         assert!(text.contains("Score all six"));
         assert!(text.contains("YOLO workspace writes are allowed"));
         assert!(!text.to_ascii_lowercase().contains("spacex"));
+        let with_map = grader_prompt(
+            "Improver",
+            "brief",
+            "goal",
+            "criteria",
+            "/ws",
+            1,
+            "did a thing",
+            false,
+            Some("- [test] lock the gap"),
+        );
+        assert!(with_map.contains("Promoted harness map"));
+        assert!(with_map.contains("[test] lock the gap"));
+        assert!(with_map.contains("do not invent that a secret is set"));
     }
 
     #[test]

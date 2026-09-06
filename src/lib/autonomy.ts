@@ -1,5 +1,32 @@
 export type Consequence = "read" | "write" | "send_merge_deploy" | "delete_pay_publish";
 
+export const AUTONOMY_RUNGS = [
+  {
+    id: "read" as const,
+    title: "Read / research",
+    action: "Inspect and summarize.",
+    control: "Automatic",
+  },
+  {
+    id: "write" as const,
+    title: "Write in workspace",
+    action: "Edit isolated files; run tests.",
+    control: "Automatic + checks",
+  },
+  {
+    id: "send_merge_deploy" as const,
+    title: "Send / merge / deploy",
+    action: "Affect a person or shared system.",
+    control: "Evidence + approval",
+  },
+  {
+    id: "delete_pay_publish" as const,
+    title: "Delete / pay / publish",
+    action: "Irreversible external action.",
+    control: "Explicit human confirmation",
+  },
+];
+
 export function consequenceLabel(tier: Consequence): string {
   switch (tier) {
     case "write":
