@@ -97,6 +97,77 @@ export type Agent = {
   updated_at: string;
 };
 
+export type HarnessJob = {
+  name: string;
+  label: string;
+  status: string;
+  summary: string;
+};
+
+export type HarnessPromotion = {
+  id: string;
+  category: string;
+  gap: string;
+  patch: string;
+  status: string;
+  created_at: string;
+  promoted_at: string | null;
+};
+
+export type HarnessRecord = {
+  jobs: HarnessJob[];
+  autonomy_tier: string;
+  autonomy_label: string;
+  approval_status: string;
+  approval_evidence: string | null;
+  classified_gap: string | null;
+  gap_category: string | null;
+  recovery_phase: string;
+  promotions: HarnessPromotion[];
+  sandbox: string;
+  allowlist: string;
+};
+
+export type HarnessMap = {
+  promotions: HarnessPromotion[];
+  notes: string[];
+  updated_at: string;
+};
+
+export type EnvVarRow = {
+  key: string;
+  kind: string;
+  description: string;
+  status: string;
+  source: string;
+  required: boolean;
+  from_config: boolean;
+  related_to: string | null;
+  display_value: string | null;
+  settable: boolean;
+};
+
+export type ConfigFieldRow = {
+  key: string;
+  description: string;
+  status: string;
+  display_value: string | null;
+};
+
+export type SetupEnvStatus = {
+  codex_home: string;
+  config_path: string;
+  config_toml_exists: boolean;
+  home_source: string;
+  model: string | null;
+  model_provider: string | null;
+  base_url: string | null;
+  env_keys_in_config: string[];
+  vars: EnvVarRow[];
+  config_fields: ConfigFieldRow[];
+  note: string;
+};
+
 export type HillclimbRun = {
   id: string;
   agent_id: string;
@@ -110,6 +181,7 @@ export type HillclimbRun = {
   allow_writes: boolean;
   created_at: string;
   updated_at: string;
+  harness?: HarnessRecord;
 };
 
 export type HillclimbIteration = {

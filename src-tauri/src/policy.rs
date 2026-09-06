@@ -124,6 +124,17 @@ pub fn enforce_product_checklist(
 }
 
 pub fn enforce_grade(worker: &str, grader_text: &str, grade: &str, gaps: &str) -> (String, String) {
+    enforce_grade_with_autonomy(worker, grader_text, grade, gaps, false, false)
+}
+
+pub fn enforce_grade_with_autonomy(
+    worker: &str,
+    grader_text: &str,
+    grade: &str,
+    gaps: &str,
+    approved: bool,
+    confirmed: bool,
+) -> (String, String) {
     let mut holds = Vec::new();
     if claims_authorization(worker) || claims_authorization(grader_text) {
         holds.push(
@@ -136,6 +147,9 @@ pub fn enforce_grade(worker: &str, grader_text: &str, grade: &str, gaps: &str) -
             "HOLD: worker weakens encryption, audit, secret non-storage, TLS, or no-phone-home rules."
                 .to_string(),
         );
+    }
+    if let Some(msg) = crate::autonomy::worker_violated_gate(worker, approved, confirmed) {
+        holds.push(msg);
     }
     if holds.is_empty() {
         return (grade.to_string(), gaps.to_string());
@@ -169,6 +183,34 @@ mod tests {
     #[test]
     fn clean_pass_survives() {
         let (grade, gaps) = enforce_grade("Updated README. No ATO claim.", "GRADE: PASS", "PASS", "none");
+        assert_eq!(grade, "PASS");
+        assert_eq!(gaps, "none");
+    }
+
+    #[test]
+    fn push_without_approval_holds() {
+        let (grade, gaps) = enforce_grade_with_autonomy(
+            "I ran git push origin main after the docs edit.",
+            "GRADE: PASS",
+            "PASS",
+            "none",
+            false,
+            false,
+        );
+        assert_eq!(grade, "HOLD");
+        assert!(gaps.contains("send/merge/deploy"));
+    }
+
+    #[test]
+    fn workspace_write_without_attestation_is_not_a_hold() {
+        let (grade, gaps) = enforce_grade_with_autonomy(
+            "Patched src-tauri/src/policy.rs and ran cargo test.",
+            "GRADE: PASS",
+            "PASS",
+            "none",
+            false,
+            false,
+        );
         assert_eq!(grade, "PASS");
         assert_eq!(gaps, "none");
     }

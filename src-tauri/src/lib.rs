@@ -1,21 +1,27 @@
 mod agents;
 mod audit;
+mod autonomy;
 mod boundary;
 mod codex;
 mod crypto;
+mod env_vault;
+mod harness;
 mod hillclimb;
 mod identity;
 mod keystore;
 mod local_env;
 mod policy;
 mod prompts;
+mod setup;
 mod store;
 mod vault;
 
 use crate::agents::{Agent, HillclimbIteration, HillclimbRun};
 use crate::codex::{find_codex, probe_status, run_turn, CodexEvent, RuntimeStatus};
+use crate::harness::{HarnessMap, HarnessPromotion};
 use crate::identity::IdentityStatus;
 use crate::prompts::{CLOSE_IL5_MISSING_CRITERIA, CLOSE_IL5_MISSING_GOAL};
+use crate::setup::SetupEnvStatus;
 use crate::store::{Chat, Message};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -176,9 +182,13 @@ fn create_chat(state: State<AppState>) -> Result<Chat, String> {
 }
 
 #[tauri::command]
-fn delete_chat(state: State<AppState>, chat_id: String) -> Result<(), String> {
+fn delete_chat(state: State<AppState>, chat_id: String, confirm: bool) -> Result<(), String> {
+    if !confirm {
+        return Err("Delete needs explicit human confirmation.".into());
+    }
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
     store::delete_chat(&db, &chat_id)?;
+    audit::write(&db, &state.app_data, "chat.delete", "chat", &chat_id, "operator confirmed delete");
     persist_locked(&mut db);
     Ok(())
 }
@@ -384,8 +394,85 @@ fn start_hillclimb(
     success_criteria: String,
     max_iterations: i64,
     allow_writes: bool,
+    approval_evidence: Option<String>,
+    confirm_destructive: bool,
 ) -> Result<HillclimbRun, String> {
-    hillclimb::start_run(app, agent_id, goal, success_criteria, max_iterations, allow_writes)
+    hillclimb::start_run(
+        app,
+        agent_id,
+        goal,
+        success_criteria,
+        max_iterations,
+        allow_writes,
+        approval_evidence,
+        confirm_destructive,
+    )
+}
+
+#[tauri::command]
+fn approve_hillclimb(app: AppHandle, run_id: String, evidence: String) -> Result<HillclimbRun, String> {
+    hillclimb::approve_run(&app, &run_id, evidence)
+}
+
+#[tauri::command]
+fn confirm_hillclimb(app: AppHandle, run_id: String) -> Result<HillclimbRun, String> {
+    hillclimb::confirm_run(&app, &run_id)
+}
+
+#[tauri::command]
+fn promote_harness(app: AppHandle, run_id: String, promotion_id: String) -> Result<HillclimbRun, String> {
+    hillclimb::promote_run(&app, &run_id, &promotion_id)
+}
+
+#[tauri::command]
+fn setup_env_status(state: State<AppState>) -> SetupEnvStatus {
+    crate::setup::setup_env_status(Some(&state.app_data), &state.project_cwd)
+}
+
+#[tauri::command]
+fn set_env_vault(state: State<AppState>, key: String, value: String) -> Result<String, String> {
+    let saved = crate::env_vault::set_value(&state.app_data, &key, &value)?;
+    if let Ok(mut db) = state.db.lock() {
+        audit::write(
+            &db,
+            &state.app_data,
+            "env.vault_write",
+            "secret",
+            &saved,
+            "env vault key written (value not logged); exported only to child codex",
+        );
+        persist_locked(&mut db);
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+fn clear_env_vault(state: State<AppState>, key: String) -> Result<(), String> {
+    crate::env_vault::clear_value(&state.app_data, &key)?;
+    if let Ok(mut db) = state.db.lock() {
+        audit::write(
+            &db,
+            &state.app_data,
+            "env.vault_clear",
+            "secret",
+            &key,
+            "env vault key cleared (value not logged)",
+        );
+        persist_locked(&mut db);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn harness_map(state: State<AppState>) -> Result<HarnessMap, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    crate::harness::load_map(&db)
+}
+
+#[tauri::command]
+fn list_harness_promotions(state: State<AppState>) -> Result<Vec<HarnessPromotion>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    crate::harness::list_promotions(&db)
 }
 
 #[tauri::command]
@@ -468,6 +555,14 @@ pub fn run() {
             get_run,
             start_hillclimb,
             cancel_hillclimb,
+            approve_hillclimb,
+            confirm_hillclimb,
+            promote_harness,
+            setup_env_status,
+            set_env_vault,
+            clear_env_vault,
+            harness_map,
+            list_harness_promotions,
             list_audit,
             export_audit,
             il5_goal_template

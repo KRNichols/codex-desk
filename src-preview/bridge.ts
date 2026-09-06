@@ -29,6 +29,8 @@ import {
 } from "./secure-store";
 import { deskAgentExecConfigArgs, operatorChatPrompt } from "../src/lib/prompts";
 import { assertLocalCodex, isCleartextUrl, urlHasQuerySecret } from "./policy";
+import { setupEnvStatus, childEnv } from "./setup";
+import { envVaultClear, envVaultSet } from "./crypto";
 
 type Chat = {
   id: string;
@@ -404,12 +406,7 @@ function runCodexTurn(
     const workspace = path.join(DATA_DIR, "workspace");
     mkdirSync(workspace, { recursive: true });
     const local = parseEnvFile(ENV_LOCAL);
-    const env = { ...process.env, ...local };
-    const slot = getPatSlot(DATA_DIR);
-    if (!env.AZURE_LLM_PAT && slot) env.AZURE_LLM_PAT = slot;
-    if (!env.AZURE_OPENAI_API_KEY && (local.AZURE_LLM_PAT || slot)) {
-      env.AZURE_OPENAI_API_KEY = local.AZURE_LLM_PAT || slot;
-    }
+    const env = childEnv();
     if (env.AZURE_LLM_ENDPOINT && isCleartextUrl(env.AZURE_LLM_ENDPOINT)) {
       reject(new Error("Refusing to start Codex: Azure endpoint is cleartext HTTP. Use HTTPS."));
       return;
@@ -685,6 +682,8 @@ export function previewBridge(middlewares: Connect.Server) {
               criteria,
               Number(body.max_iterations || 3),
               Boolean(body.allow_writes),
+              body.approval_evidence ? String(body.approval_evidence) : undefined,
+              Boolean(body.confirm_destructive),
             ),
           );
         } catch (err) {
@@ -701,6 +700,54 @@ export function previewBridge(middlewares: Connect.Server) {
       const cancelMatch = url.match(/^\/api\/runs\/([^/]+)\/cancel$/);
       if (cancelMatch && req.method === "POST") {
         json(res, 200, hill.cancelRun(decodeURIComponent(cancelMatch[1])));
+        return;
+      }
+      const approveMatch = url.match(/^\/api\/runs\/([^/]+)\/approve$/);
+      if (approveMatch && req.method === "POST") {
+        const body = await readJson(req);
+        json(res, 200, hill.approveRun(decodeURIComponent(approveMatch[1]), String(body.evidence || "")));
+        return;
+      }
+      const confirmMatch = url.match(/^\/api\/runs\/([^/]+)\/confirm$/);
+      if (confirmMatch && req.method === "POST") {
+        json(res, 200, hill.confirmRun(decodeURIComponent(confirmMatch[1])));
+        return;
+      }
+      const promoteMatch = url.match(/^\/api\/runs\/([^/]+)\/promote$/);
+      if (promoteMatch && req.method === "POST") {
+        const body = await readJson(req);
+        json(
+          res,
+          200,
+          hill.promoteRun(decodeURIComponent(promoteMatch[1]), String(body.promotion_id || "")),
+        );
+        return;
+      }
+      if (req.method === "GET" && url === "/api/setup/env") {
+        json(res, 200, setupEnvStatus());
+        return;
+      }
+      if (req.method === "POST" && url === "/api/setup/env") {
+        const body = await readJson(req);
+        const key = envVaultSet(DATA_DIR, String(body.key || ""), String(body.value || ""));
+        writeAudit("env.vault_write", "secret", key, "env vault key written (value not logged); exported only to child codex");
+        json(res, 200, { key });
+        return;
+      }
+      const envClear = url.match(/^\/api\/setup\/env\/([^/]+)$/);
+      if (envClear && req.method === "DELETE") {
+        const key = decodeURIComponent(envClear[1]);
+        envVaultClear(DATA_DIR, key);
+        writeAudit("env.vault_clear", "secret", key, "env vault key cleared (value not logged)");
+        json(res, 200, { ok: true });
+        return;
+      }
+      if (req.method === "GET" && url === "/api/harness/map") {
+        json(res, 200, hill.loadHarnessMap());
+        return;
+      }
+      if (req.method === "GET" && url === "/api/harness/promotions") {
+        json(res, 200, hill.listPromotions());
         return;
       }
       if (req.method === "GET" && url === "/api/audit") {
@@ -785,6 +832,10 @@ export function previewBridge(middlewares: Connect.Server) {
       const chatMatch = url.match(/^\/api\/chats\/([^/]+)$/);
       if (chatMatch && req.method === "DELETE") {
         const chatId = decodeURIComponent(chatMatch[1]);
+        if (!url.includes("confirm=1")) {
+          json(res, 400, { error: "Delete needs explicit human confirmation." });
+          return;
+        }
         const store = loadChatStore();
         store.chats = store.chats.filter((c) => c.id !== chatId);
         store.messages = store.messages.filter((m) => m.chat_id !== chatId);

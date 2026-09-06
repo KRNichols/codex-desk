@@ -376,6 +376,18 @@ pub fn apply_codex_env(cmd: &mut Command, app_data: Option<&Path>, cwd: &Path) {
             pat = crate::keystore::get_pat_slot(dir).ok().flatten();
         }
     }
+    if let Some(dir) = app_data {
+        for (key, value) in crate::env_vault::export_for_codex(dir) {
+            if std::env::var(&key).ok().filter(|v| !v.is_empty()).is_none()
+                && env_lookup(&local, &key).is_none()
+            {
+                cmd.env(&key, &value);
+            }
+        }
+        if pat.is_none() {
+            pat = crate::env_vault::get_value(dir, "AZURE_LLM_PAT");
+        }
+    }
     let openai = env_lookup(&local, "AZURE_OPENAI_API_KEY");
     if openai.is_none() {
         if let Some(pat) = pat {

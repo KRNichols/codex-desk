@@ -107,3 +107,72 @@ export function clearPatSlot(appData: string) {
 export function patSlotPresent(appData: string): boolean {
   return existsSync(path.join(appData, "pat.wrap"));
 }
+
+const ENV_VAULT = "env-vault.wrap";
+
+function loadEnvMap(appData: string): Record<string, string> {
+  const wrap = path.join(appData, ENV_VAULT);
+  if (!existsSync(wrap)) return {};
+  const { dek } = loadOrCreateDek(appData);
+  const raw = open(dek, readFileSync(wrap)).toString("utf8");
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveEnvMap(appData: string, map: Record<string, string>) {
+  mkdirSync(appData, { recursive: true, mode: 0o700 });
+  const wrap = path.join(appData, ENV_VAULT);
+  const keys = Object.entries(map).filter(([, v]) => v);
+  if (!keys.length) {
+    if (existsSync(wrap)) {
+      writeFileSync(wrap, Buffer.alloc(32));
+      unlinkSync(wrap);
+    }
+    return;
+  }
+  const { dek } = loadOrCreateDek(appData);
+  writeFileSync(wrap, seal(dek, Buffer.from(JSON.stringify(Object.fromEntries(keys)), "utf8")), {
+    mode: 0o600,
+  });
+}
+
+export function envVaultHas(appData: string, key: string): boolean {
+  const v = loadEnvMap(appData)[key];
+  return Boolean(v);
+}
+
+export function envVaultGet(appData: string, key: string): string | undefined {
+  const v = loadEnvMap(appData)[key];
+  return v || undefined;
+}
+
+export function envVaultKeys(appData: string): string[] {
+  return Object.keys(loadEnvMap(appData));
+}
+
+export function envVaultExport(appData: string): Record<string, string> {
+  return loadEnvMap(appData);
+}
+
+export function envVaultSet(appData: string, key: string, value: string): string {
+  const name = key.trim();
+  if (!/^[A-Z0-9_]+$/.test(name)) throw new Error("Environment key must be A-Z, 0-9, or underscore.");
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error("Value is empty.");
+  const map = loadEnvMap(appData);
+  map[name] = trimmed;
+  saveEnvMap(appData, map);
+  if (name === "AZURE_LLM_PAT") setPatSlot(appData, trimmed);
+  return name;
+}
+
+export function envVaultClear(appData: string, key: string) {
+  const map = loadEnvMap(appData);
+  delete map[key];
+  saveEnvMap(appData, map);
+  if (key === "AZURE_LLM_PAT") clearPatSlot(appData);
+}

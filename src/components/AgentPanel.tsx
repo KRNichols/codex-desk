@@ -6,15 +6,23 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  approveHillclimb,
   cancelHillclimb,
+  confirmHillclimb,
+  getHarnessMap,
   getRun,
   listAgentRuns,
+  promoteHarness,
   startHillclimb,
   updateAgent,
 } from "@/lib/runtime";
+import { classifyGoal } from "@/lib/autonomy";
+import { emptyHarness } from "@/lib/harness";
+import type { HarnessMap } from "@/lib/types";
 import { CLOSE_IL5_MISSING_CRITERIA, CLOSE_IL5_MISSING_GOAL } from "@/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, RuntimeStatus } from "@/lib/types";
 import { IdentityPanel } from "@/components/IdentityPanel";
+import { AutonomyLadder, FailureUpgradeLoop, SixJobGrid } from "@/components/HarnessBoard";
 
 export function AgentPanel({
   agent,
@@ -35,6 +43,9 @@ export function AgentPanel({
   const [iterations, setIterations] = useState<HillclimbIteration[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState("");
+  const [confirmDestructive, setConfirmDestructive] = useState(false);
+  const [harnessMap, setHarnessMap] = useState<HarnessMap | null>(null);
 
   useEffect(() => {
     setWorkspace(agent.workspace_path ?? "");
@@ -43,6 +54,9 @@ export function AgentPanel({
       setRuns(next);
       setActiveRunId(next[0]?.id ?? null);
     });
+    void getHarnessMap()
+      .then(setHarnessMap)
+      .catch(() => undefined);
   }, [agent.id, agent.brief, agent.workspace_path]);
 
   useEffect(() => {
@@ -72,6 +86,8 @@ export function AgentPanel({
 
   const activeRun = runs.find((r) => r.id === activeRunId) ?? null;
   const running = activeRun?.status === "running" || activeRun?.status === "queued";
+  const harness = activeRun?.harness ?? emptyHarness();
+  const previewTier = classifyGoal(goal, criteria);
 
   async function saveWorkspace() {
     const next = await updateAgent(agent.id, { brief, workspace_path: workspace });
@@ -90,6 +106,8 @@ export function AgentPanel({
         successCriteria: criteria.trim(),
         maxIterations: maxIter,
         allowWrites: Boolean(workspace.trim()),
+        approvalEvidence: evidence.trim() || undefined,
+        confirmDestructive,
       });
       setRuns((prev) => [run, ...prev]);
       setActiveRunId(run.id);
@@ -102,7 +120,7 @@ export function AgentPanel({
 
   return (
     <ScrollArea className="flex-1">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6">
         {activeRun ? (
           <section className="rounded-sm border border-hold/40 bg-hold/10 p-4">
             <div className="flex items-center justify-between gap-2">
@@ -133,8 +151,66 @@ export function AgentPanel({
             {activeRun.last_gaps ? (
               <pre className="grade-log mt-3 whitespace-pre-wrap text-foreground">{activeRun.last_gaps}</pre>
             ) : null}
+            {activeRun.status === "awaiting_approval" ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-foreground/85">
+                  Send / merge / deploy is gated. YOLO workspace writes are not. Paste evidence, then approve.
+                </p>
+                <Textarea
+                  value={evidence}
+                  onChange={(e) => setEvidence(e.target.value)}
+                  placeholder="Evidence: tests run, files changed, why this send is ready."
+                  className="min-h-[64px] bg-background"
+                />
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void approveHillclimb(activeRun.id, evidence.trim()).then((next) => {
+                      setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+                    })
+                  }
+                  disabled={evidence.trim().length < 8}
+                >
+                  Approve send / merge / deploy
+                </Button>
+              </div>
+            ) : null}
+            {activeRun.status === "awaiting_confirm" ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-foreground/85">
+                  Delete / pay / publish needs explicit human confirmation. This is not an identity-attestation write HOLD.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void confirmHillclimb(activeRun.id).then((next) => {
+                      setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+                    })
+                  }
+                >
+                  I confirm this destructive action
+                </Button>
+              </div>
+            ) : null}
           </section>
         ) : null}
+
+        <SixJobGrid harness={harness} envKeyPresent={status?.env_key_present} />
+        <AutonomyLadder
+          current={activeRun?.harness?.autonomy_tier ?? previewTier}
+          approvalStatus={harness.approval_status}
+        />
+        <FailureUpgradeLoop
+          harness={harness}
+          map={harnessMap}
+          runId={activeRun?.id}
+          onPromote={(runId, promoId) =>
+            void promoteHarness(runId, promoId).then((next) => {
+              setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+              void getHarnessMap().then(setHarnessMap);
+            })
+          }
+        />
 
         <IdentityPanel status={status} compact />
 
@@ -223,8 +299,30 @@ export function AgentPanel({
             </label>
             <p className="text-xs text-muted-foreground">
               YOLO writes when a workspace path is set. No Allow-workspace-writes checkbox.
+              Preview tier: {previewTier}.
             </p>
           </div>
+          {previewTier === "send_merge_deploy" ? (
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs text-muted-foreground">Evidence for send / merge / deploy</label>
+              <Textarea
+                value={evidence}
+                onChange={(e) => setEvidence(e.target.value)}
+                className="min-h-[56px] bg-background"
+                placeholder="What was verified, and where."
+              />
+            </div>
+          ) : null}
+          {previewTier === "delete_pay_publish" ? (
+            <label className="mt-3 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={confirmDestructive}
+                onChange={(e) => setConfirmDestructive(e.target.checked)}
+              />
+              I confirm this delete / pay / publish action (not an identity write HOLD).
+            </label>
+          ) : null}
           {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           <Button className="mt-3" disabled={busy || !goal.trim() || !criteria.trim()} onClick={() => void start()}>
             {busy ? "Starting…" : "Start hill-climb"}

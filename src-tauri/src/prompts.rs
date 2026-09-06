@@ -19,7 +19,7 @@ Voice:
 
 Minimum viable harness:
 A prompt steers one inference. A harness governs the whole run.
-Six jobs: Contract (goal/constraints/done); Context (rules/facts/state); Tools (schemas/permissions/sandboxes); State (persist decisions/artifacts/open risks); Evidence (tests/sources/screenshots); Recovery (retry locally, escalate, improve the system).
+Six jobs: Contract (goal/constraints/done); Context (rules/facts/state); Tools (schemas/permissions/sandboxes; Setup / Env for Codex config.toml env_key names); State (persist decisions/artifacts/open risks); Evidence (tests/sources/screenshots); Recovery (retry locally, escalate, improve the system).
 
 Autonomy is earned by evidence:
 Increase control only when consequence increases. Freedom inside boundaries, not freedom from boundaries.
@@ -63,8 +63,9 @@ IL5 (build-to, not marketing):
 Boundary:
 - Path: operator → Desk → local Codex CLI → Azure (shared Codex config.toml).
 - Connection is Codex config.toml only (endpoint + env_key). Desk injects this contract.
+- Setup / Env reads Codex home (CODEX_HOME, else ~/.codex or %USERPROFILE%/.codex) and lists every env_key plus related Azure template names. The operator may set values in Desk's encrypted env vault; Desk exports those values only to the child codex process. Setup / Env never returns secret values. Do not invent that a secret is set or that a key is FOUND.
 - Desk never phones home, never opens Azure sockets, never stores a PAT in SQLite or git.
-- No second PAT store is required beyond what Codex already uses.
+- No second PAT store is required beyond what Codex already uses. The vault is optional and is not a second Azure client.
 
 Theme:
 - UI token: orbital / aero-night. Never vendor aerospace names, logos, or wordmarks.
@@ -72,6 +73,7 @@ Theme:
 Do:
 - Lead with the result, then the proof.
 - Run the six harness jobs. Increase autonomy only with evidence.
+- Name Setup / Env when talking tools or secrets: env_key names from config.toml, vault export to child codex only. Do not invent that a secret is set.
 - Act unless the next step is destructive, irreversible, ambiguous, or needs an operator-only fact (send/merge/deploy; delete/pay/publish).
 - Grade PASS | HOLD | WARN. HOLD on unvalidated claims.
 - Mark external gaps MISSING. Do not invent evidence.
@@ -84,6 +86,7 @@ Do not:
 - Write exploits, PoCs, payloads, or attack playbooks.
 - Add Desk permission checkboxes, identity-gate write HOLDs, or "Allow workspace writes" chrome.
 - Send, merge, deploy, delete, pay, or publish without the matching evidence + approval / human confirm.
+- Invent that a secret is set or that a key is FOUND.
 - Store a PAT in SQLite, git, logs, or the transcript.
 - Phone home or open Azure sockets from Desk.
 - Weaken encryption, hash-chained audit, TLS refusal, or local-Codex-only egress.
@@ -145,9 +148,18 @@ pub fn worker_prompt(
     iteration: u32,
     max_iterations: u32,
     prior_gaps: Option<&str>,
+    harness_map: Option<&str>,
 ) -> String {
     let gaps = prior_gaps
         .map(|g| format!("Prior grader gaps to close:\n{g}\n"))
+        .unwrap_or_default();
+    let map = harness_map
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            format!(
+                "Promoted harness map (improves every later run; do not invent that a secret is set):\n{s}\n"
+            )
+        })
         .unwrap_or_default();
     format!(
         r#"{system}
@@ -169,15 +181,25 @@ Goal:
 Success criteria:
 {success_criteria}
 
-{gaps}
+{gaps}{map}
 Do the smallest change that advances the criteria. Summarize what you did and what is still open.
 Harness jobs: Contract, Context, Tools, State, Evidence, Recovery.
 Autonomy: read automatic; workspace write automatic+checks; send/merge/deploy needs evidence+approval; delete/pay/publish needs explicit human confirm.
 On fail: return the exact gap to Classify. Promote the fix into the harness (map / tool / policy / test), not only this run.
 If you cannot edit (read-only or missing CLI), say so plainly. Do not invent a passing grade.
 HOLD yourself if a claim is unvalidated.
+End the summary with a machine-readable block:
+HARNESS-JOBS:
+contract: PASS|HOLD|WARN — …
+context: …
+tools: …
+state: …
+evidence: …
+recovery: …
+CLASSIFY: category | exact gap
+PROMOTE: map|tool|policy|test|brief|loop | what to change
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS, gaps = gaps, map = map)
 }
 
 pub fn grader_prompt(
@@ -189,6 +211,7 @@ pub fn grader_prompt(
     iteration: u32,
     worker_summary: &str,
     il5_mode: bool,
+    harness_map: Option<&str>,
 ) -> String {
     let extra = if il5_mode {
         r#"
@@ -212,6 +235,14 @@ HOLD if send/merge/deploy happened without evidence+approval, or delete/pay/publ
 HOLD if a failure was patched for this run only and the exact gap was not returned for Classify / harness upgrade when the worker could promote a map, tool, policy, or test.
 "#
     };
+    let map = harness_map
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            format!(
+                "Promoted harness map (improves every later run; do not invent that a secret is set):\n{s}\n\n"
+            )
+        })
+        .unwrap_or_default();
     format!(
         r#"{system}
 
@@ -232,7 +263,7 @@ Goal:
 Success criteria:
 {success_criteria}
 
-Worker summary:
+{map}Worker summary:
 {worker_summary}
 {extra}
 End with a machine-readable line exactly like:
@@ -241,8 +272,17 @@ or GRADE: HOLD
 or GRADE: WARN
 
 Then list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.
+Also emit:
+HARNESS-JOBS:
+contract: PASS|HOLD|WARN — …
+context: …
+tools: …
+state: …
+evidence: …
+recovery: …
+Score all six. HOLD recovery if the worker retried blindly without Classify.
 "#
-    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
+    , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS, map = map)
 }
 
 pub fn parse_grade(text: &str) -> (String, String) {
@@ -383,7 +423,7 @@ mod tests {
 
     #[test]
     fn worker_prompt_is_desk_owned() {
-        let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None);
+        let text = worker_prompt("Improver", "brief", "goal", "criteria", "/ws", 1, 3, None, None);
         assert!(text.contains("DESK AGENT JOB"));
         assert!(text.contains("Codex Desk operator contract"));
         assert!(text.contains("HOLD on unvalidated claims") || text.contains("unvalidated"));
@@ -392,8 +432,22 @@ mod tests {
         assert!(text.contains("YOLO is always-on"));
         assert!(text.contains("no in-app Desk permission controls"));
         assert!(text.contains("Harness jobs: Contract, Context, Tools, State, Evidence, Recovery"));
+        assert!(text.contains("HARNESS-JOBS:"));
         assert!(text.contains("send/merge/deploy needs evidence+approval"));
         assert!(text.contains("return the exact gap to Classify"));
+        let mapped = worker_prompt(
+            "Improver",
+            "brief",
+            "goal",
+            "criteria",
+            "/ws",
+            1,
+            3,
+            None,
+            Some("- [policy] HOLD ATO claims"),
+        );
+        assert!(mapped.contains("Promoted harness map"));
+        assert!(mapped.contains("[policy] HOLD ATO claims"));
         assert!(!text.contains("authorized to operate"));
         assert!(!text.to_ascii_lowercase().contains("spacex"));
     }
@@ -409,11 +463,28 @@ mod tests {
             1,
             "did a thing",
             false,
+            None,
         );
         assert!(text.contains("send/merge/deploy happened without evidence+approval"));
         assert!(text.contains("exact gap was not returned for Classify"));
+        assert!(text.contains("HARNESS-JOBS:"));
+        assert!(text.contains("Score all six"));
         assert!(text.contains("YOLO workspace writes are allowed"));
         assert!(!text.to_ascii_lowercase().contains("spacex"));
+        let with_map = grader_prompt(
+            "Improver",
+            "brief",
+            "goal",
+            "criteria",
+            "/ws",
+            1,
+            "did a thing",
+            false,
+            Some("- [test] lock the gap"),
+        );
+        assert!(with_map.contains("Promoted harness map"));
+        assert!(with_map.contains("[test] lock the gap"));
+        assert!(with_map.contains("do not invent that a secret is set"));
     }
 
     #[test]
@@ -425,6 +496,20 @@ mod tests {
         assert!(!DESK_IMPROVER_BRIEF.to_ascii_lowercase().contains("spacex"));
         assert!(!IL5_GRADER_BRIEF.to_ascii_lowercase().contains("spacex"));
         assert!(IL5_GRADER_BRIEF.contains("YOLO workspace writes are not a HOLD"));
+    }
+
+    #[test]
+    fn operator_contract_matches_ts_twin() {
+        let ts = include_str!("../../src/lib/prompts.ts");
+        let rest = ts
+            .split_once("export const OPERATOR_CONTRACT = `")
+            .expect("ts OPERATOR_CONTRACT")
+            .1;
+        let body = rest
+            .split_once("`;\n\nexport const IL5_HARD_TRUTHS")
+            .expect("ts contract end")
+            .0;
+        assert_eq!(OPERATOR_CONTRACT, body);
     }
 
     #[test]
@@ -441,6 +526,10 @@ mod tests {
         assert!(OPERATOR_CONTRACT.contains("Do not just retry blindly"));
         assert!(OPERATOR_CONTRACT.contains("Act by default. Ask only when the next step is destructive, irreversible, ambiguous"));
         assert!(OPERATOR_CONTRACT.contains("No second PAT store"));
+        assert!(OPERATOR_CONTRACT.contains("Setup / Env"));
+        assert!(OPERATOR_CONTRACT.contains("env_key"));
+        assert!(OPERATOR_CONTRACT.contains("child codex"));
+        assert!(OPERATOR_CONTRACT.contains("Do not invent that a secret is set"));
         assert!(!OPERATOR_CONTRACT.to_ascii_lowercase().contains("spacex"));
         assert!(!OPERATOR_CONTRACT.contains("authorized to operate"));
     }
