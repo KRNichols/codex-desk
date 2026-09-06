@@ -154,6 +154,22 @@ export type ConfigFieldRow = {
   display_value: string | null;
 };
 
+export type CatalogModel = {
+  slug: string;
+  label: string | null;
+  provider: string | null;
+};
+
+export type ModelsCatalog = {
+  path: string;
+  exists: boolean;
+  ok: boolean;
+  error: string | null;
+  slugs: string[];
+  models: CatalogModel[];
+  note: string;
+};
+
 export type SetupEnvStatus = {
   codex_home: string;
   config_path: string;
@@ -165,6 +181,8 @@ export type SetupEnvStatus = {
   env_keys_in_config: string[];
   vars: EnvVarRow[];
   config_fields: ConfigFieldRow[];
+  models_catalog: ModelsCatalog;
+  catalog_slug_selected: boolean;
   note: string;
 };
 

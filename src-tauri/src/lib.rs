@@ -10,6 +10,7 @@ mod hillclimb;
 mod identity;
 mod keystore;
 mod local_env;
+mod models;
 mod policy;
 mod prompts;
 mod setup;

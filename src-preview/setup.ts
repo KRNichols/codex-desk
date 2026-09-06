@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "./secure-store";
 import { envVaultExport, envVaultHas, envVaultKeys, getPatSlot, patSlotPresent } from "./crypto";
+import { loadCatalog } from "./models";
 import type { ConfigFieldRow, EnvVarRow, SetupEnvStatus } from "../src/lib/types";
 
 const ENV_LOCAL = path.resolve(process.cwd(), ".env.local");
@@ -118,6 +119,7 @@ export function setupEnvStatus(): SetupEnvStatus {
       : process.env.HOME
         ? "HOME"
         : "fallback";
+  const modelsCatalog = loadCatalog(process.cwd());
   return {
     codex_home: home,
     config_path: configPath,
@@ -129,16 +131,22 @@ export function setupEnvStatus(): SetupEnvStatus {
     env_keys_in_config: configKeys,
     vars,
     config_fields: [
-      field("model", "Azure deployment / model name in config.toml. Codex Desk will not invent one.", model),
-      field("base_url", "HTTPS Azure resource endpoint in config.toml. No PAT in the URL.", baseUrl),
+      field(
+        "model",
+        "Selected slug from config/models.json, written as config.toml model=. Desk will not invent a deployment name.",
+        model,
+      ),
+      field("base_url", "HTTPS chat-traffic endpoint in config.toml. All Codex turns go here. No PAT in the URL.", baseUrl),
       field("model_provider", "Selected Codex provider (azure). Desk does not invent a second client.", provider),
       field(
         "env_key",
-        "Name of the environment variable that holds the PAT. The value stays out of config.toml.",
+        "Name of the environment variable that holds the registered PAT. The value stays out of config.toml.",
         configKeys.length ? configKeys.join(", ") : null,
       ),
     ],
-    note: "Desk reads Codex config.toml only. Vault values export to the child codex process — Desk is not an Azure SDK.",
+    models_catalog: modelsCatalog,
+    catalog_slug_selected: Boolean(model && modelsCatalog.slugs.includes(model)),
+    note: "Desk reads Codex config.toml (base_url + env_key) and config/models.json slugs. Vault values export to the child codex process — Desk is not an Azure SDK.",
   };
 }
 

@@ -68,11 +68,16 @@ HOLD. Home directory and filesystem root are refused.
   map; the operator can also Promote from the UI.
 - Seeded templates: Desk Improver, IL5 Architecture Grader.
 - Prompts embed IL5 hard truths plus a Desk system block (`src-tauri/src/prompts.rs`, `src/lib/prompts.ts`).
+  That injection is exec-path only (`briefs/OPERATOR.md` + `--config developer_instructions`).
+  Workspace `config/models.json` is a **slug catalog** — no system prompts, no secrets.
 - First-party briefs (`briefs/OPERATOR.md`, worker/grader/Desk Improver) run the
   six harness jobs (Contract, Context, Tools, State, Evidence, Recovery).
   Workspace writes are YOLO (automatic + checks). Send/merge/deploy still need
   evidence + approval; delete/pay/publish still need human confirm.
-- Agent jobs pass `--config project_doc_max_bytes=0` and `--config developer_instructions=…`. Auth still comes from the shared Codex home. Operator chat does not apply those overrides.
+- Every Desk `codex exec` (operator chat and hill-climb) passes
+  `--config project_doc_max_bytes=0` and `--config developer_instructions=…`.
+  Auth still comes from the shared Codex home (`base_url` + `env_key`). Do not
+  use `--ignore-user-config`.
 - UI theme token: `orbital` (`html[data-theme=orbital]`, `src/index.css`).
 - Desk does not auto-commit or push.
 

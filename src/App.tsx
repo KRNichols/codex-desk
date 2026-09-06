@@ -556,7 +556,9 @@ function EmptyState({ ready, onOpenImprover }: { ready: boolean; onOpenImprover:
       <h2 className="text-lg font-semibold tracking-wide">Talk to your local Codex</h2>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
         This desk is a chat shell. Each turn runs <code className="text-foreground">codex exec</code> on
-        this machine. The model is whatever Azure deployment Codex already uses.
+        this machine. The model is a <code className="text-foreground">config/models.json</code> slug
+        selected in Codex <code className="text-foreground">config.toml</code> — not a prompt embedded
+        in that JSON.
       </p>
       <p className="mt-3 text-sm">
         {ready
@@ -587,7 +589,9 @@ function SetupPanel({ status }: { status: RuntimeStatus }) {
         <ol className="list-decimal space-y-1 pl-5 text-foreground/90">
           <li>Install the Codex CLI so `codex --version` works in a terminal.</li>
           <li>
-            Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (HTTPS endpoint only; no PAT in the file).
+            Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (HTTPS{" "}
+            <code>base_url</code> + <code>env_key</code> name only; no PAT in the file). Set{" "}
+            <code>model</code> to a slug from <code>config/models.json</code>.
           </li>
           <li>Open Setup / Env and set the named env_key in the Desk vault (or User env / gitignored .env.local).</li>
           <li>Restart Codex Desk and send hello.</li>

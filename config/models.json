@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "note": "Slug catalog only. No secrets. No system or developer prompts. Desk injects briefs/OPERATOR.md via exec --config. Rewrite this list with your Azure deployment slugs.",
+  "models": [
+    {
+      "slug": "YOUR_AZURE_DEPLOYMENT_NAME",
+      "label": "Azure deployment (replace with your slug)",
+      "provider": "azure"
+    }
+  ]
+}
