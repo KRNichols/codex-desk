@@ -1,5 +1,6 @@
 use crate::prompts::{
     DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF, LEGACY_DESK_IMPROVER_BRIEF, LEGACY_IL5_GRADER_BRIEF,
+    PRIOR_DESK_IMPROVER_BRIEF, PRIOR_IL5_GRADER_BRIEF,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -103,7 +104,9 @@ pub fn migrate_agents(conn: &Connection) -> Result<(), String> {
     .map_err(|e| format!("migrate agents: {e}"))?;
     seed_builtin(conn)?;
     refresh_template_brief(conn, "desk-improver", LEGACY_DESK_IMPROVER_BRIEF, DESK_IMPROVER_BRIEF)?;
-    refresh_template_brief(conn, "il5-grader", LEGACY_IL5_GRADER_BRIEF, IL5_GRADER_BRIEF)
+    refresh_template_brief(conn, "desk-improver", PRIOR_DESK_IMPROVER_BRIEF, DESK_IMPROVER_BRIEF)?;
+    refresh_template_brief(conn, "il5-grader", LEGACY_IL5_GRADER_BRIEF, IL5_GRADER_BRIEF)?;
+    refresh_template_brief(conn, "il5-grader", PRIOR_IL5_GRADER_BRIEF, IL5_GRADER_BRIEF)
 }
 
 fn seed_builtin(conn: &Connection) -> Result<(), String> {

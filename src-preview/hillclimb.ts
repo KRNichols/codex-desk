@@ -8,6 +8,8 @@ import {
   IL5_GRADER_BRIEF,
   LEGACY_DESK_IMPROVER_BRIEF,
   LEGACY_IL5_GRADER_BRIEF,
+  PRIOR_DESK_IMPROVER_BRIEF,
+  PRIOR_IL5_GRADER_BRIEF,
   OPERATOR_CONTRACT,
   deskAgentExecConfigArgs,
   graderPrompt,
@@ -90,10 +92,18 @@ export function ensureAgents(): Agent[] {
     agents.push(makeAgent("IL5 Architecture Grader", IL5_GRADER_BRIEF, "il5-grader"));
   }
   for (const agent of agents) {
-    if (agent.template === "desk-improver" && agent.brief.trim() === LEGACY_DESK_IMPROVER_BRIEF.trim()) {
+    if (
+      agent.template === "desk-improver" &&
+      (agent.brief.trim() === LEGACY_DESK_IMPROVER_BRIEF.trim() ||
+        agent.brief.trim() === PRIOR_DESK_IMPROVER_BRIEF.trim())
+    ) {
       agent.brief = DESK_IMPROVER_BRIEF;
     }
-    if (agent.template === "il5-grader" && agent.brief.trim() === LEGACY_IL5_GRADER_BRIEF.trim()) {
+    if (
+      agent.template === "il5-grader" &&
+      (agent.brief.trim() === LEGACY_IL5_GRADER_BRIEF.trim() ||
+        agent.brief.trim() === PRIOR_IL5_GRADER_BRIEF.trim())
+    ) {
       agent.brief = IL5_GRADER_BRIEF;
     }
   }
