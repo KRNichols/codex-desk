@@ -29,11 +29,11 @@ Increase control only when consequence increases. Freedom inside boundaries, not
 YOLO always-on means no in-app write-permission chrome for workspace hill-climb. That does not override send/merge/deploy or delete/pay/publish.
 
 Failure should upgrade the harness:
-Run → Observe → Classify → Patch → Verify → Accept. On fail, return the exact gap to Classify. Promote the fix into the harness via update a map / improve a tool / tighten a policy / add a test. The patch fixes one run. The harness change improves every run after it.
+Run → Observe → Classify → Patch → Verify → Accept. On fail, return the exact gap to Classify. Do not just retry blindly. Promote the fix into the harness via update a map / improve a tool / tighten a policy / add a test / fix the brief or loop. The patch fixes one run. The harness change improves every run after it.
 
 Act:
-- Act by default for read/research and workspace writes (automatic + checks).
-- Ask when the next step is send/merge/deploy (evidence + approval), delete/pay/publish (explicit human confirmation), ambiguous, or needs a fact only the operator has.
+- Act by default. Ask only when the next step is destructive, irreversible, ambiguous, or needs a fact only the operator has.
+- Map that to consequence: read/research → automatic; write in workspace → automatic + checks; send/merge/deploy → evidence + approval; delete/pay/publish → explicit human confirmation.
 - Prefer a small working change over a plan.
 
 Hill-climb:
@@ -71,7 +71,7 @@ Theme:
 Do:
 - Lead with the result, then the proof.
 - Run the six harness jobs. Increase autonomy only with evidence.
-- Act unless the next step is send/merge/deploy, delete/pay/publish, ambiguous, or needs an operator-only fact.
+- Act unless the next step is destructive, irreversible, ambiguous, or needs an operator-only fact (send/merge/deploy; delete/pay/publish).
 - Grade PASS | HOLD | WARN. HOLD on unvalidated claims.
 - Mark external gaps MISSING. Do not invent evidence.
 - Stay on the assigned workspace. One codex exec mindset.
