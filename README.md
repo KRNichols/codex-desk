@@ -211,19 +211,19 @@ Live captures of the local operator shell. Theme is orbital / aero-night only.
 
 ![Main chat and SETUP NEEDED](docs/screenshots/01-setup-chat.png)
 
-Main chat / **SETUP NEEDED**. Codex is not on PATH (runtime **MISSING**, not FOUND). Share not detected; PAT `AZURE_LLM_PAT` miss… Store enc machine-bound. **Identity / audit** **YOLO**. IDENT **session-bound YOLO**. Desk Improver and IL5 Architecture Grader **IDLE**.
+Main chat / **SETUP NEEDED**. Codex is not on PATH (runtime **MISSING**, not FOUND). Sidebar **Setup / Env** **MISSING**. Share not detected; PAT `AZURE_LLM_PAT` miss… Store enc machine-bound. **Identity / audit** **YOLO**. IDENT **session-bound YOLO**. Desk Improver and IL5 Architecture Grader **IDLE**. Setup card step 3: Open **Setup / Env** and set the named `env_key` in the Desk vault.
 
 ![Agents sidebar](docs/screenshots/02-agents-list.png)
 
-Agents list plus operator `hello`. Banner **SETUP NEEDED**. Codex is not on PATH / runtime **MISSING**. Transcript: OPERATOR `hello`, then **CODEX · SETUP OR RUNTIME ERROR** — `codex` CLI was not found on PATH. **Identity / audit** **YOLO**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
+Agents list plus operator `hello`, with **Setup / Env** in the sidebar. Banner **SETUP NEEDED**. Codex is not on PATH / runtime **MISSING**. Transcript: OPERATOR `hello`, then **CODEX · SETUP OR RUNTIME ERROR** — `codex` CLI was not found on PATH. **Setup / Env** **MISSING**; **Identity / audit** **YOLO**; Desk Improver and IL5 Architecture Grader **IDLE**. Not an Azure-auth HOLD.
 
-![Desk Improver hill-climb](docs/screenshots/03-desk-improver-hillclimb.png)
+![Desk Improver harness boards](docs/screenshots/03-desk-improver-hillclimb.png)
 
-Desk Improver live run iteration 0/3 **ERROR** **HOLD**: `codex` CLI was not found on PATH; hill-climb cannot start. That HOLD is CLI-missing, not a write gate. **Identity / audit** **YOLO WRITES**. Workspace path `/workspace`. YOLO always-on when a workspace is set; no attestation form. Runtime **MISSING**. Not an ATO.
+Desk Improver idle boards (no live run). Six-job grid: **Contract** **HOLD** (goal or done criteria missing); **Context** **PASS**; **Tools** **PASS** (Setup / Env reads `config.toml` `env_key` names — do not invent that a secret is set); **State** / **Evidence** / **Recovery** **WARN**. Autonomy ladder: Read / research **Automatic**; Write in workspace **Automatic + checks** (YOLO); Send / merge / deploy **Evidence + approval**; Delete / pay / publish **Explicit human confirmation**. Failure-upgrade stepper Run → Observe → Classify → Patch → Verify → Accept (Observe current); promote map / tool / policy / test. Runtime **MISSING**. Not an ATO.
 
-![Identity / audit](docs/screenshots/04-identity-gate.png)
+![Setup / Env inventory](docs/screenshots/04-setup-env.png)
 
-**Identity / audit** **YOLO WRITES** under **SETUP NEEDED** / Codex runtime **MISSING**. Session ubuntu. Store encrypted (machine-bound). Audit chain intact. PAT slot unset (never SQLite). Egress allowlist local-codex-only. **Export audit**. No attestation form. Posix-user-session bind — not an ATO.
+**Setup / Env** under **SETUP NEEDED** / Codex runtime **MISSING**. **CONFIG MISSING** — no `config.toml`; `env_key` in file: none. Codex config fields `model`, `base_url`, `model_provider`, `env_key` all **MISSING**. Environment keys `AZURE_LLM_ENDPOINT`, `AZURE_LLM_PAT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_ENDPOINT` **MISSING** (source + grade). Vault inputs empty — no secret values shown. Do not invent FOUND. Sidebar **Setup / Env** **MISSING**. YOLO writes stay always-on; send/merge/deploy still need evidence + approval. Not an ATO.
 
 ## Known limits
 
