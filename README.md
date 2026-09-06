@@ -70,6 +70,14 @@ configured Azure endpoint.
 - Encrypted local store (AES-256-GCM, OS-backed / machine-bound DEK). PAT never stored there.
 - Hash-chained local audit events (no secret values). YOLO writes are always-on when a workspace path is set — no in-app permission chrome.
 - Clear setup errors if `codex` is missing or Azure auth is incomplete.
+- **Setup / Env** menu: reads `CODEX_HOME` or `%USERPROFILE%\.codex` /
+  `~/.codex` `config.toml`, lists every `env_key` plus Azure template vars
+  (FOUND / MISSING), and stores values in the encrypted Desk vault that
+  exports **only** to the child `codex` process.
+- Hill-climb runs persist and score the six harness jobs. Send / merge /
+  deploy waits for evidence + approval. Delete / pay / publish waits for
+  explicit confirm. Failures classify a gap and offer (or auto-promote) a
+  harness upgrade in Desk Improver.
 
 ## What this build does not do
 
@@ -101,7 +109,9 @@ Preferred setup:
 1. Put the **endpoint** in Codex’s own config (`base_url`).
 2. Put the **PAT** in an environment variable (or a gitignored `.env.local`).
 3. Point Codex `env_key` at that variable.
-4. Launch Codex Desk. The app only starts `codex` and inherits that environment.
+4. Launch Codex Desk. Open **Setup / Env** to confirm FOUND / MISSING and,
+   if needed, save the PAT into the Desk vault (child `codex` only). The app
+   never invents a second Azure client.
 
 ### Codex `config.toml` (no secrets)
 
@@ -187,8 +197,8 @@ Same placeholder keys as `.env.example`. Never commit it.
 3. Set **workspace** to this checkout (Windows example: `C:\src\codex-desk`). Home directory is refused.
 4. Goal example: `Clarify the README smoke path without claiming ATO.`
 5. Success criteria example: `A newcomer can run npm run dev and send hello; SECURITY.md residual risks stay marked MISSING.`
-6. Max iterations 3. YOLO is always-on: a workspace path enables workspace-write with no attestation prompt and no Allow-workspace-writes checkbox. Review the diff yourself. Desk will not push.
-7. Watch iteration N, last grade (PASS/HOLD/WARN), and gaps. Cancel anytime.
+6. Max iterations 3. YOLO is always-on: a workspace path enables workspace-write with no attestation prompt and no Allow-workspace-writes checkbox. Review the diff yourself. Desk will not push. A send/merge/deploy goal still asks for evidence + approval; delete/pay/publish still asks for confirm.
+7. Watch the six harness jobs, iteration N, last grade (PASS/HOLD/WARN), classified gap, and Promote into harness. Cancel anytime.
 8. Optional: run **IL5 Architecture Grader** on the same checkout. `READY`/`PASS` means prep-ready for a human GRC look — never authorized.
 
 Hill-climb worker and grader briefs include IL5 hard truths, the six harness jobs, autonomy tiers, and a spawn/validate/grade/judge contract. They HOLD on unvalidated claims and cannot “solve” IL5 by claiming ATO or deleting audit/secret rules. YOLO workspace writes are not a HOLD; send/merge/deploy without evidence + approval, or delete/pay/publish without human confirm, is.

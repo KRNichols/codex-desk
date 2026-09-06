@@ -176,6 +176,16 @@ Autonomy: read automatic; workspace write automatic+checks; send/merge/deploy ne
 On fail: return the exact gap to Classify. Promote the fix into the harness (map / tool / policy / test), not only this run.
 If you cannot edit (read-only or missing CLI), say so plainly. Do not invent a passing grade.
 HOLD yourself if a claim is unvalidated.
+End the summary with a machine-readable block:
+HARNESS-JOBS:
+contract: PASS|HOLD|WARN — …
+context: …
+tools: …
+state: …
+evidence: …
+recovery: …
+CLASSIFY: category | exact gap
+PROMOTE: map|tool|policy|test|brief|loop | what to change
 "#
     , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
 }
@@ -241,6 +251,15 @@ or GRADE: HOLD
 or GRADE: WARN
 
 Then list GAPS as a numbered list. PASS only if criteria are met, claims are validated, and IL5 hard truths were not violated. HOLD on unvalidated claims.
+Also emit:
+HARNESS-JOBS:
+contract: PASS|HOLD|WARN — …
+context: …
+tools: …
+state: …
+evidence: …
+recovery: …
+Score all six. HOLD recovery if the worker retried blindly without Classify.
 "#
     , system = DESK_AGENT_SYSTEM_BLOCK, contract = OPERATOR_CONTRACT, truths = IL5_HARD_TRUTHS)
 }
@@ -392,6 +411,7 @@ mod tests {
         assert!(text.contains("YOLO is always-on"));
         assert!(text.contains("no in-app Desk permission controls"));
         assert!(text.contains("Harness jobs: Contract, Context, Tools, State, Evidence, Recovery"));
+        assert!(text.contains("HARNESS-JOBS:"));
         assert!(text.contains("send/merge/deploy needs evidence+approval"));
         assert!(text.contains("return the exact gap to Classify"));
         assert!(!text.contains("authorized to operate"));
@@ -412,6 +432,8 @@ mod tests {
         );
         assert!(text.contains("send/merge/deploy happened without evidence+approval"));
         assert!(text.contains("exact gap was not returned for Classify"));
+        assert!(text.contains("HARNESS-JOBS:"));
+        assert!(text.contains("Score all six"));
         assert!(text.contains("YOLO workspace writes are allowed"));
         assert!(!text.to_ascii_lowercase().contains("spacex"));
     }

@@ -34,12 +34,17 @@ This architecture is **not** an ATO.
 
 ### UI
 
-Operator desk (chats) plus an Agents sidebar. Agent detail starts hill-climb
-jobs without blocking the operator composer.
+Operator desk (chats) plus an Agents sidebar. **Setup / Env** reads
+`CODEX_HOME` or `%USERPROFILE%\.codex` / `~/.codex` `config.toml`, lists every
+`env_key` plus the Azure template (FOUND / MISSING), and writes values into
+the encrypted Desk vault. Agent detail starts hill-climb jobs without blocking
+the operator composer. Each run surfaces the six harness jobs, the autonomy
+tier, and a Classify → Promote path.
 
 ### App core
 
-Tauri commands for chats, agents, hill-climb start/cancel, and audit list.
+Tauri commands for chats, agents, hill-climb start/cancel/approve/confirm,
+Setup / Env vault, harness promote, and audit list.
 Events: `codex-stream`, `hillclimb-event`. Vite preview mirrors the HTTP API.
 
 ### Codex runner
@@ -54,9 +59,13 @@ HOLD. Home directory and filesystem root are refused.
 
 - Agent record: name, brief, status, optional workspace, independent
   worker/grader Codex thread ids.
-- Run: goal, success criteria, max iterations, grade, gaps.
-- Loop: worker Codex → grader Codex → PASS stop / HOLD or WARN feed gaps back
-  until max or cancel (Run → Observe → Classify → Patch → Verify → Accept).
+- Run: goal, success criteria, max iterations, grade, gaps, plus a structured
+  six-job harness record the grader scores (Contract, Context, Tools, State,
+  Evidence, Recovery).
+- Loop: worker Codex → grader Codex → PASS stop / HOLD or WARN feed the
+  classified gap back until max or cancel (Run → Observe → Classify → Patch →
+  Verify → Accept). On verify, Desk Improver can auto-promote into the harness
+  map; the operator can also Promote from the UI.
 - Seeded templates: Desk Improver, IL5 Architecture Grader.
 - Prompts embed IL5 hard truths plus a Desk system block (`src-tauri/src/prompts.rs`, `src/lib/prompts.ts`).
 - First-party briefs (`briefs/OPERATOR.md`, worker/grader/Desk Improver) run the

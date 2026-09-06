@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AgentPanel } from "@/components/AgentPanel";
 import { IdentityPanel } from "@/components/IdentityPanel";
+import { SetupEnvPanel } from "@/components/SetupEnvPanel";
 import { Input } from "@/components/ui/input";
 import { Badge, GradeBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export default function App() {
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [view, setView] = useState<"desk" | "agent" | "identity">("desk");
+  const [view, setView] = useState<"desk" | "agent" | "identity" | "setup">("desk");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [newAgentOpen, setNewAgentOpen] = useState(false);
@@ -119,6 +120,9 @@ export default function App() {
   }
 
   async function handleDelete(chatId: string) {
+    if (!window.confirm("Delete this chat? This is a delete-tier action and needs your confirmation.")) {
+      return;
+    }
     await deleteChat(chatId);
     const next = await refreshChats();
     if (next.length === 0) {
@@ -335,6 +339,21 @@ export default function App() {
             <button
               className={cn(
                 "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm",
+                view === "setup" ? "bg-accent" : "hover:bg-accent/60",
+              )}
+              onClick={() => {
+                setView("setup");
+                setSidebarOpen(false);
+              }}
+            >
+              <span className="truncate">Setup / Env</span>
+              <Badge variant={status?.env_key_present ? "pass" : "hold"}>
+                {status?.env_key_present ? "FOUND" : "MISSING"}
+              </Badge>
+            </button>
+            <button
+              className={cn(
+                "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm",
                 view === "identity" ? "bg-accent" : "hover:bg-accent/60",
               )}
               onClick={() => {
@@ -393,7 +412,9 @@ export default function App() {
           </Button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
-              {view === "identity"
+              {view === "setup"
+                ? "Setup / Env"
+                : view === "identity"
                 ? "Identity / audit"
                 : view === "agent"
                   ? (activeAgent?.name ?? "Agent")
@@ -415,7 +436,11 @@ export default function App() {
           )}
         </header>
 
-        {view === "identity" ? (
+        {view === "setup" ? (
+          <ScrollArea className="flex-1">
+            <SetupEnvPanel onChange={() => void refreshStatus()} />
+          </ScrollArea>
+        ) : view === "identity" ? (
           <div className="mx-auto w-full max-w-3xl px-4 py-6">
             <IdentityPanel status={status} onChange={() => void refreshStatus()} />
           </div>
@@ -540,7 +565,8 @@ function EmptyState({ ready, onOpenImprover }: { ready: boolean; onOpenImprover:
       </p>
       <p className="mt-3 text-sm text-muted-foreground">
         Operators can also create independent hill-climb agents. Desk Improver can iterate on this
-        checkout if you point its workspace at the repo. It will not claim ATO.
+        checkout if you point its workspace at the repo. It will not claim ATO. Use Setup / Env to
+        set Codex env_key values into the Desk vault.
       </p>
       <Button size="sm" variant="outline" className="mt-3" onClick={onOpenImprover}>
         Open Desk Improver
@@ -563,7 +589,7 @@ function SetupPanel({ status }: { status: RuntimeStatus }) {
           <li>
             Point Codex at Azure in <code>{status.codex_home}/config.toml</code> (HTTPS endpoint only; no PAT in the file).
           </li>
-          <li>Set AZURE_LLM_PAT in your user environment, OS secret slot, or a gitignored .env.local.</li>
+          <li>Open Setup / Env and set the named env_key in the Desk vault (or User env / gitignored .env.local).</li>
           <li>Restart Codex Desk and send hello.</li>
         </ol>
       ) : null}

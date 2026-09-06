@@ -16,8 +16,18 @@ import {
   parseGrade,
   workerPrompt,
 } from "../src/lib/prompts";
-import type { Agent, HillclimbIteration, HillclimbRun, OperatorAttestation } from "../src/lib/types";
+import type {
+  Agent,
+  HarnessMap,
+  HarnessPromotion,
+  HillclimbIteration,
+  HillclimbRun,
+  OperatorAttestation,
+} from "../src/lib/types";
+import { classifyGoal, gate } from "../src/lib/autonomy";
+import { classifyGap, newHarnessRecord, offerPromotion, scoreJobs } from "../src/lib/harness";
 import { DATA_DIR, loadStore, patchStore, writeAudit } from "./secure-store";
+import { childEnv } from "./setup";
 import { assertLocalCodex, enforceGrade, enforceProductChecklist } from "./policy";
 import { sessionUser } from "./crypto";
 
@@ -26,6 +36,7 @@ type StoreFile = {
   runs?: HillclimbRun[];
   iterations?: HillclimbIteration[];
   identity?: { machine_binding: string; attestation: OperatorAttestation };
+  harnessMap?: HarnessMap;
 };
 
 const cancels = new Set<string>();
@@ -230,7 +241,7 @@ function runCodex(
       cwd: workdir,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
-      env: process.env,
+      env: childEnv(),
     });
     child.stdin.write(prompt);
     child.stdin.end();
@@ -301,10 +312,19 @@ export function yoloWritesEnabled(workspacePath?: string | null): boolean {
   return Boolean(workspacePath?.trim());
 }
 
-export function startRun(agentId: string, goal: string, successCriteria: string, maxIterations: number, _allowWrites?: boolean) {
+export function startRun(
+  agentId: string,
+  goal: string,
+  successCriteria: string,
+  maxIterations: number,
+  _allowWrites?: boolean,
+  approvalEvidence?: string,
+  confirmDestructive?: boolean,
+) {
   const agent = ensureAgents().find((a) => a.id === agentId);
   if (!agent) throw new Error("Agent not found.");
   const allowWrites = yoloWritesEnabled(agent.workspace_path);
+  const harness = newHarnessRecord(goal, successCriteria, agent.workspace_path, allowWrites);
   const run: HillclimbRun = {
     id: randomUUID(),
     agent_id: agentId,
@@ -318,12 +338,88 @@ export function startRun(agentId: string, goal: string, successCriteria: string,
     allow_writes: allowWrites,
     created_at: nowIso(),
     updated_at: nowIso(),
+    harness,
   };
+  const blocked = gate(classifyGoal(goal, successCriteria), Boolean(approvalEvidence), Boolean(confirmDestructive), approvalEvidence);
+  if (blocked) {
+    run.status = harness.approval_status === "required" ? "awaiting_approval" : "awaiting_confirm";
+    run.last_gaps = blocked;
+    upsertRun(run);
+    audit("hillclimb.gate", "run", run.id, `tier=${harness.autonomy_tier} held (no identity attestation)`);
+    return run;
+  }
+  if (approvalEvidence) {
+    harness.approval_status = "approved";
+    harness.approval_evidence = approvalEvidence;
+  }
+  if (confirmDestructive) harness.approval_status = "confirmed";
   upsertRun(run);
   updateAgentStatus(agentId, "running");
-  audit("hillclimb.start", "run", run.id, `agent=${agent.name} writes=${allowWrites}`);
+  audit("hillclimb.start", "run", run.id, `agent=${agent.name} writes=${allowWrites} tier=${harness.autonomy_tier}`);
   setImmediate(() => void loop(run.id));
   return run;
+}
+
+export function approveRun(runId: string, evidence: string) {
+  const err = gate("send_merge_deploy", true, false, evidence);
+  if (err) throw new Error(err);
+  const { run } = getRun(runId);
+  if (!run.harness) run.harness = newHarnessRecord(run.goal, run.success_criteria, null, run.allow_writes);
+  run.harness.approval_status = "approved";
+  run.harness.approval_evidence = evidence.trim();
+  run.status = "queued";
+  run.updated_at = nowIso();
+  upsertRun(run);
+  updateAgentStatus(run.agent_id, "running");
+  audit("hillclimb.approve", "run", runId, "send/merge/deploy approved (evidence recorded, no secret values)");
+  setImmediate(() => void loop(run.id));
+  return run;
+}
+
+export function confirmRun(runId: string) {
+  const { run } = getRun(runId);
+  if (!run.harness) run.harness = newHarnessRecord(run.goal, run.success_criteria, null, run.allow_writes);
+  run.harness.approval_status = "confirmed";
+  run.status = "queued";
+  run.updated_at = nowIso();
+  upsertRun(run);
+  updateAgentStatus(run.agent_id, "running");
+  audit("hillclimb.confirm", "run", runId, "delete/pay/publish confirmed by operator");
+  setImmediate(() => void loop(run.id));
+  return run;
+}
+
+export function promoteRun(runId: string, promotionId: string) {
+  const { run } = getRun(runId);
+  if (!run.harness) throw new Error("No harness record.");
+  const promo = run.harness.promotions.find((p) => p.id === promotionId);
+  if (!promo) throw new Error("Promotion not found.");
+  promo.status = "promoted";
+  promo.promoted_at = nowIso();
+  const map = loadHarnessMap();
+  map.promotions.unshift({ ...promo });
+  map.notes.unshift(`[${promo.category}] ${promo.gap} — ${promo.patch}`);
+  map.notes = map.notes.slice(0, 40);
+  map.promotions = map.promotions.slice(0, 40);
+  map.updated_at = nowIso();
+  savePartial({ harnessMap: map });
+  upsertRun(run);
+  audit("harness.promote", "run", runId, "operator promoted a classified gap into the harness map");
+  return run;
+}
+
+export function loadHarnessMap(): HarnessMap {
+  return (
+    load().harnessMap ?? {
+      promotions: [],
+      notes: [],
+      updated_at: nowIso(),
+    }
+  );
+}
+
+export function listPromotions(): HarnessPromotion[] {
+  return loadHarnessMap().promotions;
 }
 
 export function cancelRun(runId: string) {
@@ -421,11 +517,67 @@ async function loop(runId: string) {
       });
       const grader = await runCodex(binary, gprompt, workdir, "read-only", agent.grader_thread_id);
       if (grader.threadId) updateAgentStatus(agent.id, "running", { grader: grader.threadId });
+      const approved =
+        run.harness?.approval_status === "approved" || run.harness?.approval_status === "confirmed";
+      const confirmed = run.harness?.approval_status === "confirmed";
       const parsed = enforceProductChecklist(
         workdir,
-        enforceGrade(worker.text, grader.text, parseGrade(grader.text).grade, parseGrade(grader.text).gaps),
+        enforceGrade(
+          worker.text,
+          grader.text,
+          parseGrade(grader.text).grade,
+          parseGrade(grader.text).gaps,
+          approved,
+          confirmed,
+        ),
       );
-      gaps = parsed.gaps;
+      const classified =
+        parsed.grade === "HOLD" || parsed.grade === "WARN" ? classifyGap(parsed.gaps) : undefined;
+      if (classified) {
+        gaps = `${parsed.gaps}\n\nCLASSIFIED GAP: [${classified.category}] ${classified.gap}\nPROMOTE CANDIDATE: ${classified.promote}`;
+      } else {
+        gaps = parsed.gaps;
+      }
+      if (!run.harness) {
+        run.harness = newHarnessRecord(run.goal, run.success_criteria, agent.workspace_path, writes);
+      }
+      run.harness.classified_gap = classified?.gap ?? run.harness.classified_gap;
+      run.harness.gap_category = classified?.category ?? run.harness.gap_category;
+      run.harness.recovery_phase =
+        parsed.grade === "HOLD" || parsed.grade === "WARN"
+          ? classified
+            ? "classify"
+            : "observe"
+          : classified
+            ? "verify"
+            : "observe";
+      run.harness.jobs = scoreJobs({
+        goal: run.goal,
+        criteria: run.success_criteria,
+        workspace: workdir,
+        briefPresent: Boolean(agent.brief.trim()),
+        sandbox: writes ? "workspace-write" : "read-only",
+        iteration: i,
+        worker: worker.text,
+        grader: grader.text,
+        grade: parsed.grade,
+        classifiedGap: run.harness.classified_gap,
+        allowWrites: writes,
+      });
+      if (classified) offerPromotion(run.harness, classified);
+      if (parsed.grade === "PASS" && classified && agent.template === "desk-improver") {
+        const offered = [...run.harness.promotions].reverse().find((p) => p.status === "offered");
+        if (offered) {
+          offered.status = "auto-promoted";
+          offered.promoted_at = nowIso();
+          const map = loadHarnessMap();
+          map.promotions.unshift({ ...offered });
+          map.notes.unshift(`[${offered.category}] ${offered.gap} — ${offered.patch}`);
+          map.updated_at = nowIso();
+          savePartial({ harnessMap: map });
+          audit("harness.promote", "run", runId, "auto-promoted after verify (Desk Improver)");
+        }
+      }
       addIteration({
         id: randomUUID(),
         run_id: runId,
@@ -433,11 +585,11 @@ async function loop(runId: string) {
         phase: "grader",
         worker_summary: grader.text,
         grade: parsed.grade,
-        gaps: parsed.gaps,
+        gaps,
         created_at: nowIso(),
       });
       run.last_grade = parsed.grade;
-      run.last_gaps = parsed.gaps;
+      run.last_gaps = gaps;
       run.current_iteration = i;
       const done = parsed.grade === "PASS" || i >= run.max_iterations;
       run.status = parsed.grade === "PASS" ? "passed" : done ? "hold" : "running";

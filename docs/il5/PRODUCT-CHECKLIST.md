@@ -30,7 +30,11 @@ product|identity-gate|PASS|identity.rs machine-bound session bind; YOLO writes w
 product|no-phone-home|PASS|No analytics, crash phone-home, or Desk-owned Azure SDK
 product|lockfiles|PASS|package-lock.json + src-tauri/Cargo.lock committed
 product|sbom-note|PASS|docs/il5/SBOM.md lockfile-derived component list (not a signed provenance attestation)
-product|hillclimb-policy|PASS|policy.rs / src-preview/policy.ts HOLD on ATO claims and weakened controls
+product|hillclimb-policy|PASS|policy.rs / src-preview/policy.ts HOLD on ATO claims, weakened controls, and send/merge/deploy without approval
+product|setup-env|PASS|setup.rs + SetupEnvPanel reads CODEX_HOME/USERPROFILE config.toml; lists env_key + Azure template FOUND/MISSING; env_vault.rs exports only to child codex
+product|harness-six-jobs|PASS|harness.rs scores Contract/Context/Tools/State/Evidence/Recovery on every run; AgentPanel surfaces them; grader prompt + policy merge
+product|autonomy-ladder|PASS|autonomy.rs read automatic; workspace write YOLO+checks; send/merge/deploy evidence+approval; delete/pay/publish confirm. No identity-attestation write HOLD
+product|failure-upgrade|PASS|classify_gap → offer/auto promote into harness_map; Desk Improver UI Promote path (Run→Observe→Classify→Patch→Verify→Accept)
 product|exploit-policy|PASS|AGENTS.md + briefs forbid exploits/PoCs/attack playbooks
 product|telemetry|PASS|None from Desk
 product|package-prep|PASS|docs/il5/BOUNDARY.md + SECURITY.md + ARCHITECTURE.md (prep package, not an SSP)

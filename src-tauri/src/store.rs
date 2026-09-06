@@ -49,6 +49,7 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
     crate::agents::migrate_agents(conn)?;
     crate::audit::migrate_audit(conn)?;
     crate::identity::migrate_identity(conn)?;
+    crate::harness::migrate_harness(conn)?;
     Ok(())
 }
 

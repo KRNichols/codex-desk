@@ -6,12 +6,19 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  approveHillclimb,
   cancelHillclimb,
+  confirmHillclimb,
+  getHarnessMap,
   getRun,
   listAgentRuns,
+  promoteHarness,
   startHillclimb,
   updateAgent,
 } from "@/lib/runtime";
+import { classifyGoal } from "@/lib/autonomy";
+import { emptyHarness } from "@/lib/harness";
+import type { HarnessMap } from "@/lib/types";
 import { CLOSE_IL5_MISSING_CRITERIA, CLOSE_IL5_MISSING_GOAL } from "@/lib/prompts";
 import type { Agent, HillclimbIteration, HillclimbRun, RuntimeStatus } from "@/lib/types";
 import { IdentityPanel } from "@/components/IdentityPanel";
@@ -35,6 +42,9 @@ export function AgentPanel({
   const [iterations, setIterations] = useState<HillclimbIteration[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState("");
+  const [confirmDestructive, setConfirmDestructive] = useState(false);
+  const [harnessMap, setHarnessMap] = useState<HarnessMap | null>(null);
 
   useEffect(() => {
     setWorkspace(agent.workspace_path ?? "");
@@ -43,6 +53,9 @@ export function AgentPanel({
       setRuns(next);
       setActiveRunId(next[0]?.id ?? null);
     });
+    void getHarnessMap()
+      .then(setHarnessMap)
+      .catch(() => undefined);
   }, [agent.id, agent.brief, agent.workspace_path]);
 
   useEffect(() => {
@@ -72,6 +85,8 @@ export function AgentPanel({
 
   const activeRun = runs.find((r) => r.id === activeRunId) ?? null;
   const running = activeRun?.status === "running" || activeRun?.status === "queued";
+  const harness = activeRun?.harness ?? emptyHarness();
+  const previewTier = classifyGoal(goal, criteria);
 
   async function saveWorkspace() {
     const next = await updateAgent(agent.id, { brief, workspace_path: workspace });
@@ -90,6 +105,8 @@ export function AgentPanel({
         successCriteria: criteria.trim(),
         maxIterations: maxIter,
         allowWrites: Boolean(workspace.trim()),
+        approvalEvidence: evidence.trim() || undefined,
+        confirmDestructive,
       });
       setRuns((prev) => [run, ...prev]);
       setActiveRunId(run.id);
@@ -133,6 +150,126 @@ export function AgentPanel({
             {activeRun.last_gaps ? (
               <pre className="grade-log mt-3 whitespace-pre-wrap text-foreground">{activeRun.last_gaps}</pre>
             ) : null}
+            {activeRun.status === "awaiting_approval" ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-foreground/85">
+                  Send / merge / deploy is gated. YOLO workspace writes are not. Paste evidence, then approve.
+                </p>
+                <Textarea
+                  value={evidence}
+                  onChange={(e) => setEvidence(e.target.value)}
+                  placeholder="Evidence: tests run, files changed, why this send is ready."
+                  className="min-h-[64px] bg-background"
+                />
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void approveHillclimb(activeRun.id, evidence.trim()).then((next) => {
+                      setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+                    })
+                  }
+                  disabled={evidence.trim().length < 8}
+                >
+                  Approve send / merge / deploy
+                </Button>
+              </div>
+            ) : null}
+            {activeRun.status === "awaiting_confirm" ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-foreground/85">
+                  Delete / pay / publish needs explicit human confirmation. This is not an identity-attestation write HOLD.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void confirmHillclimb(activeRun.id).then((next) => {
+                      setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+                    })
+                  }
+                >
+                  I confirm this destructive action
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="rounded-sm border border-border bg-card p-4">
+          <h3 className="font-medium">Six-job harness</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            A prompt steers one inference. This record governs the run. Grader scores all six.
+          </p>
+          <p className="mt-2 font-mono text-[11px] text-foreground/80">{harness.autonomy_label}</p>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Recovery: {harness.recovery_phase} · sandbox {harness.sandbox} · {harness.allowlist}
+          </p>
+          <ol className="mt-3 space-y-2">
+            {(harness.jobs.length ? harness.jobs : emptyHarness().jobs).map((job) => (
+              <li key={job.name} className="rounded-sm border border-border bg-background px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{job.label}</span>
+                  <GradeBadge grade={job.status} />
+                </div>
+                <p className="mt-1 text-xs text-foreground/80">{job.summary}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {harness.classified_gap || harness.promotions.length ? (
+          <section className="rounded-sm border border-border bg-card p-4">
+            <h3 className="font-medium">Failure upgrade</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Run → Observe → Classify → Patch → Verify → Accept. Promote the fix into the harness, not only this run.
+            </p>
+            {harness.classified_gap ? (
+              <p className="mt-2 font-mono text-xs">
+                Classify [{harness.gap_category ?? "map"}]: {harness.classified_gap}
+              </p>
+            ) : null}
+            <ul className="mt-3 space-y-2">
+              {harness.promotions.map((promo) => (
+                <li key={promo.id} className="rounded-sm border border-border bg-background px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono">
+                      {promo.category} · {promo.status}
+                    </span>
+                    {promo.status === "offered" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void promoteHarness(activeRun!.id, promo.id).then((next) => {
+                            setRuns((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+                            void getHarnessMap().then(setHarnessMap);
+                          })
+                        }
+                      >
+                        Promote into harness
+                      </Button>
+                    ) : (
+                      <GradeBadge grade="PASS" />
+                    )}
+                  </div>
+                  <p className="mt-1">{promo.gap}</p>
+                  <p className="mt-1 text-muted-foreground">{promo.patch}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {harnessMap?.notes?.length ? (
+          <section className="rounded-sm border border-border bg-card p-4">
+            <h3 className="font-medium">Harness map (promoted)</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Engine-style promote path. These notes improve every later Desk Improver run.
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+              {harnessMap.notes.slice(0, 8).map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
           </section>
         ) : null}
 
@@ -223,8 +360,30 @@ export function AgentPanel({
             </label>
             <p className="text-xs text-muted-foreground">
               YOLO writes when a workspace path is set. No Allow-workspace-writes checkbox.
+              Preview tier: {previewTier}.
             </p>
           </div>
+          {previewTier === "send_merge_deploy" ? (
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs text-muted-foreground">Evidence for send / merge / deploy</label>
+              <Textarea
+                value={evidence}
+                onChange={(e) => setEvidence(e.target.value)}
+                className="min-h-[56px] bg-background"
+                placeholder="What was verified, and where."
+              />
+            </div>
+          ) : null}
+          {previewTier === "delete_pay_publish" ? (
+            <label className="mt-3 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={confirmDestructive}
+                onChange={(e) => setConfirmDestructive(e.target.checked)}
+              />
+              I confirm this delete / pay / publish action (not an identity write HOLD).
+            </label>
+          ) : null}
           {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           <Button className="mt-3" disabled={busy || !goal.trim() || !criteria.trim()} onClick={() => void start()}>
             {busy ? "Starting…" : "Start hill-climb"}

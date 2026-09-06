@@ -1,3 +1,4 @@
+use crate::harness::{self, HarnessRecord};
 use crate::prompts::{
     DESK_IMPROVER_BRIEF, IL5_GRADER_BRIEF, LEGACY_DESK_IMPROVER_BRIEF, LEGACY_IL5_GRADER_BRIEF,
     PRIOR_DESK_IMPROVER_BRIEF, PRIOR_IL5_GRADER_BRIEF,
@@ -36,6 +37,7 @@ pub struct HillclimbRun {
     pub allow_writes: bool,
     pub created_at: String,
     pub updated_at: String,
+    pub harness: HarnessRecord,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +80,8 @@ pub fn migrate_agents(conn: &Connection) -> Result<(), String> {
             last_gaps TEXT,
             allow_writes INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            harness_json TEXT NOT NULL DEFAULT '{}'
         );
         CREATE TABLE IF NOT EXISTS hillclimb_iterations (
             id TEXT PRIMARY KEY,
@@ -102,6 +105,10 @@ pub fn migrate_agents(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("migrate agents: {e}"))?;
+    let _ = conn.execute(
+        "ALTER TABLE hillclimb_runs ADD COLUMN harness_json TEXT NOT NULL DEFAULT '{}'",
+        [],
+    );
     seed_builtin(conn)?;
     refresh_template_brief(conn, "desk-improver", LEGACY_DESK_IMPROVER_BRIEF, DESK_IMPROVER_BRIEF)?;
     refresh_template_brief(conn, "desk-improver", PRIOR_DESK_IMPROVER_BRIEF, DESK_IMPROVER_BRIEF)?;
@@ -281,9 +288,11 @@ pub fn create_run(
     success_criteria: &str,
     max_iterations: i64,
     allow_writes: bool,
+    workspace: Option<&str>,
 ) -> Result<HillclimbRun, String> {
     let now = Utc::now().to_rfc3339();
     let max_iterations = max_iterations.clamp(1, 12);
+    let harness = harness::new_record(goal, success_criteria, workspace, allow_writes);
     let run = HillclimbRun {
         id: Uuid::new_v4().to_string(),
         agent_id: agent_id.to_string(),
@@ -297,10 +306,11 @@ pub fn create_run(
         allow_writes,
         created_at: now.clone(),
         updated_at: now,
+        harness,
     };
     conn.execute(
-        "INSERT INTO hillclimb_runs (id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, NULL, NULL, ?7, ?8, ?9)",
+        "INSERT INTO hillclimb_runs (id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at, harness_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, NULL, NULL, ?7, ?8, ?9, ?10)",
         params![
             run.id,
             run.agent_id,
@@ -310,7 +320,8 @@ pub fn create_run(
             run.status,
             if allow_writes { 1 } else { 0 },
             run.created_at,
-            run.updated_at
+            run.updated_at,
+            harness::to_json(&run.harness)
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -320,7 +331,7 @@ pub fn create_run(
 pub fn get_run(conn: &Connection, id: &str) -> Result<Option<HillclimbRun>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at
+            "SELECT id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at, harness_json
              FROM hillclimb_runs WHERE id = ?1",
         )
         .map_err(|e| e.to_string())?;
@@ -334,6 +345,7 @@ pub fn get_run(conn: &Connection, id: &str) -> Result<Option<HillclimbRun>, Stri
 
 fn map_run(row: &rusqlite::Row<'_>) -> Result<HillclimbRun, String> {
     let allow: i64 = row.get(9).map_err(|e| e.to_string())?;
+    let harness_json: String = row.get(12).unwrap_or_else(|_| "{}".into());
     Ok(HillclimbRun {
         id: row.get(0).map_err(|e| e.to_string())?,
         agent_id: row.get(1).map_err(|e| e.to_string())?,
@@ -347,13 +359,14 @@ fn map_run(row: &rusqlite::Row<'_>) -> Result<HillclimbRun, String> {
         allow_writes: allow != 0,
         created_at: row.get(10).map_err(|e| e.to_string())?,
         updated_at: row.get(11).map_err(|e| e.to_string())?,
+        harness: harness::parse_record(&harness_json),
     })
 }
 
 pub fn list_runs(conn: &Connection, agent_id: &str) -> Result<Vec<HillclimbRun>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at
+            "SELECT id, agent_id, goal, success_criteria, max_iterations, current_iteration, status, last_grade, last_gaps, allow_writes, created_at, updated_at, harness_json
              FROM hillclimb_runs WHERE agent_id = ?1 ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -386,6 +399,15 @@ pub fn update_run(
     )
     .map_err(|e| e.to_string())?;
     get_run(conn, id)?.ok_or_else(|| "Run not found after update.".into())
+}
+
+pub fn save_harness(conn: &Connection, id: &str, harness: &HarnessRecord) -> Result<(), String> {
+    conn.execute(
+        "UPDATE hillclimb_runs SET harness_json=?1, updated_at=?2 WHERE id=?3",
+        params![harness::to_json(harness), Utc::now().to_rfc3339(), id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn add_iteration(

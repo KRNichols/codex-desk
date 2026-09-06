@@ -60,6 +60,10 @@ what changed and what remains. HOLD on unvalidated claims. Desk
 injects `briefs/OPERATOR.md` plus this contract via `codex exec`;
 do not rely on global `config.toml` system prompts.
 
+Score the six harness jobs (Contract, Context, Tools, State,
+Evidence, Recovery) on the run record. On fail, return the exact
+gap to Classify and promote a harness change when you can.
+
 Run the six harness jobs. Workspace writes are YOLO (automatic +
 checks). Do not send / merge / deploy without evidence + approval.
 Do not delete / pay / publish without explicit human confirmation.

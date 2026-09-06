@@ -2,6 +2,8 @@ import type {
   Agent,
   AuditEvent,
   Chat,
+  HarnessMap,
+  HarnessPromotion,
   HillclimbEvent,
   HillclimbIteration,
   HillclimbRun,
@@ -9,6 +11,7 @@ import type {
   Message,
   OperatorAttestation,
   RuntimeStatus,
+  SetupEnvStatus,
   StreamEvent,
 } from "./types";
 
@@ -50,10 +53,10 @@ export async function createChat(): Promise<Chat> {
 
 export async function deleteChat(chatId: string): Promise<void> {
   if (isTauri()) {
-    await invokeTauri("delete_chat", { chatId });
+    await invokeTauri("delete_chat", { chatId, confirm: true });
     return;
   }
-  const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
+  const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}?confirm=1`, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -225,6 +228,8 @@ export async function startHillclimb(input: {
   successCriteria: string;
   maxIterations: number;
   allowWrites: boolean;
+  approvalEvidence?: string;
+  confirmDestructive?: boolean;
 }): Promise<HillclimbRun> {
   if (isTauri()) {
     return invokeTauri<HillclimbRun>("start_hillclimb", {
@@ -233,6 +238,8 @@ export async function startHillclimb(input: {
       successCriteria: input.successCriteria,
       maxIterations: input.maxIterations,
       allowWrites: input.allowWrites,
+      approvalEvidence: input.approvalEvidence ?? null,
+      confirmDestructive: Boolean(input.confirmDestructive),
     });
   }
   const res = await fetch(`/api/agents/${encodeURIComponent(input.agentId)}/runs`, {
@@ -243,8 +250,81 @@ export async function startHillclimb(input: {
       success_criteria: input.successCriteria,
       max_iterations: input.maxIterations,
       allow_writes: input.allowWrites,
+      approval_evidence: input.approvalEvidence,
+      confirm_destructive: Boolean(input.confirmDestructive),
     }),
   });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function approveHillclimb(runId: string, evidence: string): Promise<HillclimbRun> {
+  if (isTauri()) return invokeTauri<HillclimbRun>("approve_hillclimb", { runId, evidence });
+  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ evidence }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function confirmHillclimb(runId: string): Promise<HillclimbRun> {
+  if (isTauri()) return invokeTauri<HillclimbRun>("confirm_hillclimb", { runId });
+  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/confirm`, { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function promoteHarness(runId: string, promotionId: string): Promise<HillclimbRun> {
+  if (isTauri()) return invokeTauri<HillclimbRun>("promote_harness", { runId, promotionId });
+  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/promote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ promotion_id: promotionId }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getSetupEnv(): Promise<SetupEnvStatus> {
+  if (isTauri()) return invokeTauri<SetupEnvStatus>("setup_env_status");
+  const res = await fetch("/api/setup/env");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function setEnvVault(key: string, value: string): Promise<string> {
+  if (isTauri()) return invokeTauri<string>("set_env_vault", { key, value });
+  const res = await fetch("/api/setup/env", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, value }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const body = (await res.json()) as { key?: string };
+  return body.key ?? key;
+}
+
+export async function clearEnvVault(key: string): Promise<void> {
+  if (isTauri()) {
+    await invokeTauri("clear_env_vault", { key });
+    return;
+  }
+  const res = await fetch(`/api/setup/env/${encodeURIComponent(key)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function getHarnessMap(): Promise<HarnessMap> {
+  if (isTauri()) return invokeTauri<HarnessMap>("harness_map");
+  const res = await fetch("/api/harness/map");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function listHarnessPromotions(): Promise<HarnessPromotion[]> {
+  if (isTauri()) return invokeTauri<HarnessPromotion[]>("list_harness_promotions");
+  const res = await fetch("/api/harness/promotions");
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
