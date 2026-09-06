@@ -56,9 +56,13 @@ HOLD. Home directory and filesystem root are refused.
   worker/grader Codex thread ids.
 - Run: goal, success criteria, max iterations, grade, gaps.
 - Loop: worker Codex → grader Codex → PASS stop / HOLD or WARN feed gaps back
-  until max or cancel.
+  until max or cancel (Run → Observe → Classify → Patch → Verify → Accept).
 - Seeded templates: Desk Improver, IL5 Architecture Grader.
 - Prompts embed IL5 hard truths plus a Desk system block (`src-tauri/src/prompts.rs`, `src/lib/prompts.ts`).
+- First-party briefs (`briefs/OPERATOR.md`, worker/grader/Desk Improver) run the
+  six harness jobs (Contract, Context, Tools, State, Evidence, Recovery).
+  Workspace writes are YOLO (automatic + checks). Send/merge/deploy still need
+  evidence + approval; delete/pay/publish still need human confirm.
 - Agent jobs pass `--config project_doc_max_bytes=0` and `--config developer_instructions=…`. Auth still comes from the shared Codex home. Operator chat does not apply those overrides.
 - UI theme token: `orbital` (`html[data-theme=orbital]`, `src/index.css`).
 - Desk does not auto-commit or push.

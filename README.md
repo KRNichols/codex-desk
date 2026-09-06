@@ -3,10 +3,43 @@
 A personal desktop chat desk that shells the **local Codex CLI**. Codex Desk does not talk to Grok, Cursor models, ChatGPT’s UI, or Azure OpenAI SDKs. The model is whatever **Azure-hosted deployment Codex is already configured to use**.
 
 ```
-You  →  Codex Desk  →  local `codex` CLI  →  Codex config (endpoint + PAT)  →  Azure-hosted LLM
+You  →  Codex Desk  →  local `codex` CLI  →  Codex config.toml (endpoint + env_key)  →  Azure-hosted LLM
 ```
 
 Working name: **Codex Desk**. Rename later if you want.
+
+## Minimum viable harness
+
+Codex Desk is the **harness** around **your** local Codex CLI and `config.toml`.
+It is not a second Azure or Grok client. A prompt steers one inference. A harness
+governs the whole run.
+
+Six jobs:
+
+1. **Contract** — goal, constraints, done
+2. **Context** — rules, facts, state
+3. **Tools** — schemas, permissions, sandboxes
+4. **State** — persist decisions, artifacts, open risks
+5. **Evidence** — tests, sources, screenshots
+6. **Recovery** — retry locally, escalate, improve the system
+
+Autonomy is earned by evidence — freedom inside boundaries, not freedom from them:
+
+| Consequence | Control |
+|---|---|
+| Read / research | Automatic |
+| Write in workspace | Automatic + checks (YOLO always-on; no in-app write-permission chrome) |
+| Send / merge / deploy | Evidence + approval |
+| Delete / pay / publish | Explicit human confirmation |
+
+YOLO always-on does **not** waive send / merge / deploy or delete / pay / publish.
+
+When a run fails: Run → Observe → Classify → Patch → Verify → Accept. Return the
+exact gap to Classify. Promote the fix into the harness (map, tool, policy, or
+test). The patch fixes one run. The harness change improves every run after it.
+
+First-party briefs: `briefs/OPERATOR.md` (injected on every Desk `codex exec`).
+Worker, grader, and Desk Improver prompts hook the same jobs.
 
 ## IL5 posture (aligned, not authorized)
 
@@ -44,7 +77,12 @@ configured Azure endpoint.
 - No PAT or real endpoint in the repo.
 - No fake SSO/CAC. No automatic git push. No routines/MCP marketplace/cloud VMs.
 
-## Auth model (endpoint + PAT, local only)
+## Connection (Codex `config.toml` only)
+
+The only connection path is the operator’s existing Codex `config.toml`
+(endpoint + `env_key` for the PAT). Desk injects `briefs/OPERATOR.md`. It does
+not invent a second Azure client and does **not** require a second PAT store
+beyond what Codex already uses.
 
 You were given an Azure HTTP endpoint and a personal access token (PAT). Those stay on your machine.
 
@@ -52,7 +90,7 @@ You were given an Azure HTTP endpoint and a personal access token (PAT). Those s
 
 **Same Azure config as VS Code Codex; Desk injects `briefs/OPERATOR.md` so VS Code system prompts don’t constrain chat or hill-climb.**
 
-Desk reads the shared Codex home (`CODEX_HOME` or `~/.codex` / `%USERPROFILE%\.codex`) for **provider + endpoint + PAT/env only**. It does not invent a second Azure client or require a second PAT. Operator chat uses that same Codex config.
+Desk reads the shared Codex home (`CODEX_HOME` or `~/.codex` / `%USERPROFILE%\.codex`) for **provider + endpoint + PAT/env only**. Operator chat uses that same Codex config.
 
 Every Desk `codex exec` (new chats and hill-climb workers/graders) injects the first-party **operator contract** in `briefs/OPERATOR.md` through the exec prompt and `--config developer_instructions=…` / `project_doc_max_bytes=0`. New agents default to that contract. Desk does **not** use `--ignore-user-config` — that would drop the Azure provider. Global `AGENTS.md` / `developer_instructions` in `config.toml` stay available to the VS Code extension; keep “helpful” instruction profiles there (or in a named Codex `--profile` Desk never passes). If an older Codex CLI ignores `--config`, the same operator contract is still the first section of the exec prompt.
 
@@ -153,7 +191,7 @@ Same placeholder keys as `.env.example`. Never commit it.
 7. Watch iteration N, last grade (PASS/HOLD/WARN), and gaps. Cancel anytime.
 8. Optional: run **IL5 Architecture Grader** on the same checkout. `READY`/`PASS` means prep-ready for a human GRC look — never authorized.
 
-Hill-climb worker and grader briefs include IL5 hard truths and a spawn/validate/grade/judge contract. They HOLD on unvalidated claims and cannot “solve” IL5 by claiming ATO or deleting audit/secret rules.
+Hill-climb worker and grader briefs include IL5 hard truths, the six harness jobs, autonomy tiers, and a spawn/validate/grade/judge contract. They HOLD on unvalidated claims and cannot “solve” IL5 by claiming ATO or deleting audit/secret rules. YOLO workspace writes are not a HOLD; send/merge/deploy without evidence + approval, or delete/pay/publish without human confirm, is.
 
 The UI uses the **orbital** (aero-night) console theme: charcoal/black, high-contrast type, restrained crimson actions. That name is a token, not a brand.
 
