@@ -8,6 +8,8 @@ You  →  Codex Desk  →  local `codex` CLI  →  Codex config.toml (endpoint +
 
 Working name: **Codex Desk**. Rename later if you want.
 
+**Contract + install (Windows):** [`AGENTS.md`](AGENTS.md) is the Codex contract for this repo (harness, autonomy, orchestration, install, secrets). Azure `config.toml` + env: [Connection](#connection-codex-configtoml-only).
+
 ## Minimum viable harness
 
 Codex Desk is the **harness** around **your** local Codex CLI and `config.toml`.
@@ -164,24 +166,9 @@ Same placeholder keys as `.env.example`. Never commit it.
 
 ## First-run checklist
 
-1. Install Node.js 20+ and Rust (Tauri prerequisites). On Windows also install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if prompted.
-2. Install the Codex CLI and confirm it is on PATH:
-   ```powershell
-   npm install -g @openai/codex
-   codex --version
-   ```
-3. Write `%USERPROFILE%\.codex\config.toml` with your Azure **endpoint** (see above). Do not paste the PAT into that file.
-4. Set `AZURE_LLM_PAT` (and optionally `AZURE_LLM_ENDPOINT`) in User env or `.env.local`.
-5. From this repo:
-   ```powershell
-   npm install
-   npm run dev
-   ```
-6. Smoke path: open the app → send `hello` → the transcript should show a real Codex reply. If Codex is missing or the PAT/endpoint is wrong, the UI shows a setup error pointing at Codex config — not a fake model.
+Windows install, Codex CLI, clone, `npm install`, and `npm run dev` / `npm run build` are in [`AGENTS.md`](AGENTS.md) — one path, do not fork a second list here.
 
-`npm run dev` launches the desktop app (`tauri dev`).  
-`npm run dev:ui` is the Vite UI on `http://127.0.0.1:47321` (same Codex runner, preview host only).  
-`npm run build` produces the native installer via Tauri.
+Then connect Azure ([Connection](#connection-codex-configtoml-only)): endpoint in `config.toml`, PAT in env or **Setup / Env**, never in git. Smoke path: open the app → send `hello` → real Codex reply, or a setup error pointing at Codex config — not a fake model.
 
 ## Windows notes
 
